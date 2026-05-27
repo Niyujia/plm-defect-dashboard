@@ -26,9 +26,9 @@ GROUPS = [
     ('NPI黄恒沵',    ['黄恒沵']),
     ('通讯组黄林欢', ['黄林欢', '严立言', '郑思捷', '肖金华']),
     ('卡组张辉权',   ['张辉权', '唐建斌', '梁毅雄', '罗绘东']),
-    ('结构组赵林立', ['夏小平', '赵林立']),
+    ('结构组赵林立', ['夏小平', '赵林立', '杨炎月']),
     ('PQA戚飘红',    ['戚飘红', '俞正帅']),
-    ('应用丘志鹏',   ['华聪', '丘志鹏']),
+    ('应用丘志鹏',   ['华聪', '丘志鹏', '李金牛']),
     ('测试部汪肖肖',   ['汪肖肖']),
     ('测试部硬件测试',  ['王蓉', '李锐杰', '孟德宇', '沈志伟', '邱诗照']),
     ('测试部软件测试',  ['梁坚', '覃锦庆', '张宏伟', '唐兰', '钟金兰', '汤海燕', '赵丽敏', '贺婷', '马晓微', '熊鸣', '张理晴']),
@@ -93,7 +93,7 @@ def calc_overview(df):
     # 缺陷总数剔除"测试审核不通过关闭"
     total_df = df[df['问题状态'] != '测试审核不通过关闭']
     total = len(total_df)
-    unrepaired_statuses = ['开启', '修复中', '已分配', '正在审阅', '测试审核']
+    unrepaired_statuses = ['开启', '修复中', '已分配', '正在审阅', '测试审核', '已拒绝']
     unrepaired = len(total_df[total_df['问题状态'].isin(unrepaired_statuses)])
     # 已关闭+评审关闭
     closed_review = len(total_df[total_df['问题状态'].isin(['已关闭', '评审关闭'])])
@@ -435,14 +435,23 @@ body {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetic
 <div class="tabs">
   <button class="tab-btn active" data-tab="overview">📋 缺陷总览</button>
   <button class="tab-btn" data-tab="groups">👥 各组缺陷统计</button>
-  <button class="tab-btn" data-tab="trend">📈 修复率关闭率走势</button>
-  <button class="tab-btn" data-tab="rounds">🔁 各阶段及轮次</button>
   <button class="tab-btn" data-tab="tr">🎯 TR节点及关闭率</button>
-  <button class="tab-btn" data-tab="severe">🔴 严重问题</button>
 </div>
 
 <div class="content">
-  <div id="panel-overview" class="tab-panel active"><div class="kpi-grid" id="kpiGrid"></div></div>
+  <div id="panel-overview" class="tab-panel active">
+    <div class="kpi-grid" id="kpiGrid"></div>
+    <div class="trend-section" style="margin-top:20px;">
+      <h3>📈 修复率 &amp; 关闭率走势 <small style="color:#999;font-weight:400;">（按机型筛选变化）</small></h3>
+      <div class="chart-container"><canvas id="trendChart"></canvas></div>
+      <table class="trend-table"><thead><tr><th>日期</th><th>缺陷总数</th><th>修复率</th><th>关闭率</th></tr></thead><tbody id="trendTableBody"></tbody></table>
+    </div>
+    <div class="trend-section" style="margin-top:20px;">
+      <h3>🔁 各测试轮次缺陷数量分布 <small style="color:#999;font-weight:400;">（HV0.1/SV0.1已归一化为V0.1，随机型筛选变化）</small></h3>
+      <div class="chart-container"><canvas id="roundChart"></canvas></div>
+      <table class="trend-table" style="margin-top:14px;"><thead><tr><th>测试轮次</th><th>缺陷数量</th></tr></thead><tbody id="roundTableBody"></tbody></table>
+    </div>
+  </div>
   <div id="panel-groups" class="tab-panel">
     <div class="stats-row">
       <div class="chart-col"><h3>📊 各组缺陷数量分布 <small style="color:#999;font-weight:400;">（Skill A 公式）</small></h3><div class="chart-wrap"><canvas id="groupChart"></canvas></div></div>
@@ -457,30 +466,7 @@ body {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetic
         </div>
       </div>
     </div>
-  </div>
-  <div id="panel-trend" class="tab-panel">
-    <div class="trend-section">
-      <h3>📈 修复率 &amp; 关闭率走势 <small style="color:#999;font-weight:400;">（全机型数据，按日统计）</small></h3>
-      <div class="chart-container"><canvas id="trendChart"></canvas></div>
-      <table class="trend-table"><thead><tr><th>日期</th><th>缺陷总数</th><th>修复率</th><th>关闭率</th></tr></thead><tbody id="trendTableBody"></tbody></table>
-    </div>
-  </div>
-  <div id="panel-rounds" class="tab-panel">
-    <div class="trend-section">
-      <h3>🔁 各测试轮次缺陷数量分布 <small style="color:#999;font-weight:400;">（HV0.1/SV0.1已归一化为V0.1，随机型筛选变化）</small></h3>
-      <div class="chart-container"><canvas id="roundChart"></canvas></div>
-      <table class="trend-table" style="margin-top:14px;"><thead><tr><th>测试轮次</th><th>缺陷数量</th></tr></thead><tbody id="roundTableBody"></tbody></table>
-    </div>
-  </div>
-  <div id="panel-tr" class="tab-panel">
-    <div class="trend-section">
-      <h3>🎯 TR节点关闭率对比 <small style="color:#999;font-weight:400;">（累计关闭率 vs 目标值，随机型筛选变化）</small></h3>
-      <div class="chart-container" style="height:350px;"><canvas id="trChart"></canvas></div>
-      <table class="trend-table" style="margin-top:14px;"><thead><tr><th>TR节点</th><th>包含阶段</th><th>缺陷总数</th><th>已关闭+评审关闭</th><th>关闭率</th><th>目标值</th><th>状态</th><th>差距</th></tr></thead><tbody id="trTableBody"></tbody></table>
-    </div>
-  </div>
-  <div id="panel-severe" class="tab-panel">
-    <div class="trend-section">
+    <div class="trend-section" style="margin-top:20px;">
       <h3>🔴 严重问题列表 <small style="color:#999;font-weight:400;">（A：致命 / B：严重，随机型筛选变化）</small></h3>
       <div class="lc" style="margin-bottom:12px;">
         <select id="severeFilter" onchange="renderSevere()">
@@ -493,6 +479,13 @@ body {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetic
       <div class="list-scroll" style="max-height:500px;">
         <table><thead><tr><th>编号</th><th>问题描述</th><th>责任人</th><th>机型</th><th>严重程度</th><th>状态</th></tr></thead><tbody id="severeBody"></tbody></table>
       </div>
+    </div>
+  </div>
+  <div id="panel-tr" class="tab-panel">
+    <div class="trend-section">
+      <h3>🎯 TR节点关闭率对比 <small style="color:#999;font-weight:400;">（累计关闭率 vs 目标值，随机型筛选变化）</small></h3>
+      <div class="chart-container" style="height:350px;"><canvas id="trChart"></canvas></div>
+      <table class="trend-table" style="margin-top:14px;"><thead><tr><th>TR节点</th><th>包含阶段</th><th>缺陷总数</th><th>已关闭+评审关闭</th><th>关闭率</th><th>目标值</th><th>状态</th><th>差距</th></tr></thead><tbody id="trTableBody"></tbody></table>
     </div>
   </div>
 </div>
@@ -521,8 +514,8 @@ function init() {{
     this.classList.add('active');
     document.getElementById('panel-' + this.dataset.tab).classList.add('active');
     if (this.dataset.tab === 'groups' && groupChart) groupChart.resize();
-    if (this.dataset.tab === 'trend' && trendChart) trendChart.resize();
-    if (this.dataset.tab === 'rounds' && roundChart) roundChart.resize();
+    if (this.dataset.tab === 'overview' && trendChart) trendChart.resize();
+    if (this.dataset.tab === 'overview' && roundChart) roundChart.resize();
     if (this.dataset.tab === 'tr' && trChart) trChart.resize();
   }}));
   document.addEventListener('click', function(e) {{
@@ -632,7 +625,7 @@ function filterByModel(items) {{
 function renderOverview() {{
   const filtered = DATA.ALL_DETAILS.filter(d => d.status !== '测试审核不通过关闭').filter(d => selModels.includes(d.model));
   let total=filtered.length, unrepaired=0, closedReview=0, toVerify=0;
-  const uStat=['开启','修复中','已分配','正在审阅','测试审核'];
+  const uStat=['开启','修复中','已分配','正在审阅','测试审核','已拒绝'];
   filtered.forEach(d => {{
     if(uStat.includes(d.status)) unrepaired++;
     if(d.status==='已关闭'||d.status==='评审关闭') closedReview++;
@@ -643,7 +636,7 @@ function renderOverview() {{
   const cr = total>0?(closedReview/total*100).toFixed(1):'0.0';
   document.getElementById('kpiGrid').innerHTML =
     `<div class="kpi-card kpi-total"><div class="kpi-lbl">缺陷总数</div><div class="kpi-val">${{total}}</div><div class="kpi-sub">已剔除测试审核不通过关闭</div></div>` +
-    `<div class="kpi-card kpi-unfixed"><div class="kpi-lbl">未修复缺陷</div><div class="kpi-val">${{unrepaired}}</div><div class="kpi-sub">开启/修复中/已分配</div></div>` +
+    `<div class="kpi-card kpi-unfixed"><div class="kpi-lbl">未修复缺陷</div><div class="kpi-val">${{unrepaired}}</div><div class="kpi-sub">开启/修复中/已分配/已拒绝</div></div>` +
     `<div class="kpi-card kpi-fixed"><div class="kpi-lbl">已关闭+评审关闭</div><div class="kpi-val">${{closedReview}}</div><div class="kpi-sub">用于计算关闭率</div></div>` +
     `<div class="kpi-card kpi-fixed"><div class="kpi-lbl">已修复待验证</div><div class="kpi-val">${{toVerify}}</div><div class="kpi-sub">待验证修复</div></div>` +
     `<div class="kpi-card" style="border-left:3px solid #43a047;"><div class="kpi-lbl">缺陷修复率</div><div class="kpi-val">${{fr}}%</div><div class="kpi-sub">(已关闭+评审关闭+已修复待验证)/总数</div></div>` +
@@ -724,7 +717,7 @@ function renderGroupList() {{
     const sc = d.severity&&d.severity.includes('A')?'tag-sA':d.severity&&d.severity.includes('B')?'tag-sB':d.severity&&d.severity.includes('C')?'tag-sC':d.severity&&d.severity.includes('D')?'tag-sD':'';
     const stc = d.status==='已关闭'?'tag-st-closed':['已修复待验证','已解决'].includes(d.status)?'tag-st-fixed':'tag-st-open';
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><small>${{d.id}}</small></td><td><span title="${{d.name.replace(/"/g,'&quot;')}}">${{d.name.length>18?d.name.substring(0,18)+'...':d.name}}</span></td><td><small>${{d.person}}</small></td><td><small>${{d.model}}</small></td><td><span class="tag ${{stc}}">${{d.status}}</span></td><td><span class="tag ${{sc}}">${{d.severity||''}}</span></td>`;
+    tr.innerHTML = `<td><small>${{d.id}}</small></td><td style="max-width:300px;word-break:break-all;"><span title="${{d.name.replace(/"/g,'&quot;')}}">${{d.name}}</span></td><td style="white-space:nowrap;"><small>${{d.person}}</small></td><td><small>${{d.model}}</small></td><td style="white-space:nowrap;"><span class="tag ${{stc}}">${{d.status}}</span></td><td style="white-space:nowrap;"><span class="tag ${{sc}}">${{d.severity||''}}</span></td>`;
     document.getElementById('listBody').appendChild(tr);
   }});
   if(items.length>200) {{
@@ -1029,7 +1022,7 @@ function renderSevere() {{
   const filterVal = document.getElementById('severeFilter').value;
   let items;
   if (filterVal === 'unfixed') {{
-    const unrepairedStatuses = ['开启', '修复中', '已分配', '正在审阅', '测试审核'];
+    const unrepairedStatuses = ['开启', '修复中', '已分配', '正在审阅', '测试审核', '已拒绝'];
     items = severe.filter(d => unrepairedStatuses.includes(d.status));
   }} else if (filterVal === 'to_verify') {{
     items = severe.filter(d => d.status === '已修复待验证');
@@ -1052,7 +1045,7 @@ function renderSevere() {{
   }}
 }}
 
-function refreshAll() {{ renderOverview(); renderGroupChart(); renderGroupList(); renderRoundChart(); renderTrChart(); renderSevere(); }}
+function refreshAll() {{ renderOverview(); renderTrend(); renderRoundChart(); renderGroupChart(); renderGroupList(); renderTrChart(); renderSevere(); }}
 
 document.addEventListener('DOMContentLoaded', init);
 </script>
