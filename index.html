@@ -146,19 +146,19 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
     <div class="stats-row">
       <div class="chart-col"><h3>📊 各组缺陷数量分布 <small style="color:#999;font-weight:400;">（Skill A 公式）</small></h3><div class="chart-wrap"><canvas id="groupChart"></canvas></div></div>
       <div class="list-col">
-        <h3>📋 缺陷明细</h3>
+        <h3>📋 缺陷明细 <small style="color:#999;font-weight:400;">（未修复 + 已修复待验证）</small></h3>
         <div class="lc" style="flex-wrap:wrap; gap:6px;">
+          <select id="statusFilter" onchange="renderGroupList()">
+            <option value="all">缺陷状态：全部</option>
+            <option value="unfixed">缺陷状态：未修复</option>
+            <option value="to_verify">缺陷状态：已修复待验证</option>
+          </select>
           <select id="groupSelect" onchange="onGroupChange()"></select>
           <select id="severitySelect" onchange="renderGroupList()">
-            <option value="all">全部严重程度</option>
-            <option value="严重">严重</option>
-            <option value="一般">一般</option>
-            <option value="优化建议">优化建议</option>
-          </select>
-          <select id="verifySelect" onchange="renderGroupList()">
-            <option value="all">全部状态</option>
-            <option value="verify_hw">已修复待验证 - 硬件测试组</option>
-            <option value="verify_sw">已修复待验证 - 软件测试组</option>
+            <option value="all">严重程度：全部</option>
+            <option value="严重">严重程度：严重</option>
+            <option value="一般">严重程度：一般</option>
+            <option value="优化建议">严重程度：优化建议</option>
           </select>
           <span class="cnt" id="listCount"></span>
         </div>
@@ -418,20 +418,23 @@ function onGroupChange() {
 }
 
 function renderGroupList() {
-  let items = getSkillADetails();
-  // 筛选1: 组别
+  const unrepairedStatuses = ['开启', '修复中', '已分配', '正在审阅', '测试审核', '已拒绝'];
+  // 数据源: 所有未修复 + 已修复待验证（按机型筛选）
+  let items = DATA.ALL_DETAILS.filter(d =>
+    selModels.includes(d.model) &&
+    (unrepairedStatuses.includes(d.status) || d.status === '已修复待验证')
+  );
+  // 筛选1: 缺陷状态
+  const statusFilter = document.getElementById('statusFilter').value;
+  if (statusFilter === 'unfixed') items = items.filter(d => unrepairedStatuses.includes(d.status));
+  else if (statusFilter === 'to_verify') items = items.filter(d => d.status === '已修复待验证');
+  // 筛选2: 各组缺陷明细
   if (selGroup !== '全部组别') items = items.filter(d => d.group === selGroup);
-  // 筛选2: 严重程度
+  // 筛选3: 严重程度
   const sevFilter = document.getElementById('severitySelect').value;
-  if (sevFilter !== 'all') {
-    if(sevFilter==='严重') items = items.filter(d => (d.severity||'').includes('致命')||(d.severity||'').includes('严重'));
-    else if(sevFilter==='一般') items = items.filter(d => (d.severity||'').includes('一般')||(!(d.severity||'').includes('致命')&&!(d.severity||'').includes('严重')&&!(d.severity||'').includes('建议')));
-    else if(sevFilter==='优化建议') items = items.filter(d => (d.severity||'').includes('建议'));
-  }
-  // 筛选3: 已修复待验证
-  const verifyFilter = document.getElementById('verifySelect').value;
-  if (verifyFilter === 'verify_hw') items = items.filter(d => d.status === '已修复待验证' && d.group === '测试部硬件测试');
-  else if (verifyFilter === 'verify_sw') items = items.filter(d => d.status === '已修复待验证' && d.group === '测试部软件测试');
+  if (sevFilter === '严重') items = items.filter(d => (d.severity||'').includes('致命')||(d.severity||'').includes('严重'));
+  else if (sevFilter === '一般') items = items.filter(d => (d.severity||'').includes('一般')||(!(d.severity||'').includes('致命')&&!(d.severity||'').includes('严重')&&!(d.severity||'').includes('建议')));
+  else if (sevFilter === '优化建议') items = items.filter(d => (d.severity||'').includes('建议'));
   document.getElementById('listCount').textContent = `共 ${items.length} 条`;
   document.getElementById('listBody').innerHTML = '';
   items.slice(0,200).forEach(d => {
