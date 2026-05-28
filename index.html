@@ -63,7 +63,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
 .kpi-b .kpi-val { color:#e65100; }
 
 .stats-row { display:flex; gap:20px; min-height:460px; }
-.chart-col { flex:1; background:white; border-radius:12px; padding:16px; box-shadow:0 2px 8px rgba(0,0,0,.07); }
+.chart-col { flex:0.55; background:white; border-radius:12px; padding:16px; box-shadow:0 2px 8px rgba(0,0,0,.07); }
 .chart-col h3 { font-size:14px; margin-bottom:10px; color:#333; }
 .chart-col .chart-wrap { position:relative; height:400px; }
 .list-col { flex:1; background:white; border-radius:12px; padding:16px; box-shadow:0 2px 8px rgba(0,0,0,.07); display:flex; flex-direction:column; }
@@ -127,9 +127,9 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
   <div id="panel-overview" class="tab-panel active">
     <div class="kpi-grid" id="kpiGrid"></div>
     <div class="trend-section" style="margin-top:20px;">
-      <h3>📈 修复率 &amp; 关闭率走势 <small style="color:#999;font-weight:400;">（按机型筛选变化）</small></h3>
-      <div class="chart-container"><canvas id="trendChart"></canvas></div>
-      <table class="trend-table"><thead><tr><th>日期</th><th>缺陷总数</th><th>修复率</th><th>关闭率</th></tr></thead><tbody id="trendTableBody"></tbody></table>
+      <h3>🎯 TR节点关闭率对比 <small style="color:#999;font-weight:400;">（累计关闭率 vs 目标值，随机型筛选变化）</small></h3>
+      <div class="chart-container" style="height:350px;"><canvas id="trChart"></canvas></div>
+      <table class="trend-table" style="margin-top:14px;"><thead><tr><th>TR节点</th><th>包含阶段</th><th>缺陷总数</th><th>已关闭+评审关闭</th><th>关闭率</th><th>目标值</th><th>状态</th><th>差距</th></tr></thead><tbody id="trTableBody"></tbody></table>
     </div>
     <div class="trend-section" style="margin-top:20px;">
       <h3>🔁 各阶段缺陷数量分布 <small style="color:#999;font-weight:400;">（EVT/DVT/PVT/结项，分组柱状图+总数折线）</small></h3>
@@ -137,9 +137,9 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
       <table class="trend-table" style="margin-top:14px;"><thead><tr><th>阶段</th><th>总数</th><th style="color:#e53935">严重</th><th style="color:#fb8c00">一般</th><th style="color:#43a047">优化建议</th></tr></thead><tbody id="roundTableBody"></tbody></table>
     </div>
     <div class="trend-section" style="margin-top:20px;">
-      <h3>🎯 TR节点关闭率对比 <small style="color:#999;font-weight:400;">（累计关闭率 vs 目标值，随机型筛选变化）</small></h3>
-      <div class="chart-container" style="height:350px;"><canvas id="trChart"></canvas></div>
-      <table class="trend-table" style="margin-top:14px;"><thead><tr><th>TR节点</th><th>包含阶段</th><th>缺陷总数</th><th>已关闭+评审关闭</th><th>关闭率</th><th>目标值</th><th>状态</th><th>差距</th></tr></thead><tbody id="trTableBody"></tbody></table>
+      <h3>📈 修复率 &amp; 关闭率走势 <small style="color:#999;font-weight:400;">（按机型筛选变化，近2周）</small></h3>
+      <div class="chart-container"><canvas id="trendChart"></canvas></div>
+      <table class="trend-table"><thead><tr><th>日期</th><th>缺陷总数</th><th>修复率</th><th>关闭率</th></tr></thead><tbody id="trendTableBody"></tbody></table>
     </div>
   </div>
   <div id="panel-groups" class="tab-panel">
@@ -167,34 +167,6 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
         </div>
       </div>
     </div>
-    <div class="trend-section" style="margin-top:20px;">
-      <h3>🔴 严重问题列表 <small style="color:#999;font-weight:400;">（A：致命 / B：严重，随机型筛选变化）</small></h3>
-      <div class="lc" style="margin-bottom:12px;">
-        <select id="severeFilter" onchange="renderSevere()">
-          <option value="all">全部</option>
-          <option value="unfixed">未修复</option>
-          <option value="to_verify">已修复待验证</option>
-        </select>
-        <span class="cnt" id="severeCount"></span>
-      </div>
-      <div class="list-scroll" style="max-height:500px;">
-        <table><thead><tr><th>编号</th><th>问题描述</th><th>责任人</th><th>机型</th><th>严重程度</th><th>状态</th></tr></thead><tbody id="severeBody"></tbody></table>
-      </div>
-    </div>
-    <div class="trend-section" style="margin-top:20px;">
-      <h3>✅ 已修复待验证 <small style="color:#999;font-weight:400;">（状态=已修复待验证，可按组筛选）</small></h3>
-      <div class="lc" style="margin-bottom:12px;">
-        <select id="toVerifyGroup" onchange="renderToVerify()">
-          <option value="NPI黄恒沵">NPI黄恒沵</option>
-          <option value="测试部软件测试">软件测试组</option>
-          <option value="测试部硬件测试">硬件测试组</option>
-        </select>
-        <span class="cnt" id="toVerifyCount"></span>
-      </div>
-      <div class="list-scroll" style="max-height:400px;">
-        <table><thead><tr><th>编号</th><th>问题描述</th><th>责任人</th><th>机型</th><th>严重程度</th><th>轮次</th></tr></thead><tbody id="toVerifyBody"></tbody></table>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -215,8 +187,6 @@ function init() {
   renderTrend();
   renderRoundChart();
   renderTrChart();
-  renderSevere();
-  renderToVerify();
   document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', function() {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(x => x.classList.remove('active'));
@@ -441,17 +411,18 @@ function renderGroupChart() {
 function updateGroupSelectCounts(filtered) {
   // 更新所有3个筛选框的数量标记
   const unrepairedStatuses = ['开启', '修复中', '已分配', '正在审阅', '测试审核', '已拒绝'];
-  // 状态筛选
+  // 状态筛选 — 使用全量统计（按机型）
+  const all = DATA.ALL_DETAILS.filter(d => selModels.includes(d.model));
+  const unfixed = all.filter(d => unrepairedStatuses.includes(d.status)).length;
+  const toVerify = all.filter(d => d.status === '已修复待验证').length;
   const st = document.getElementById('statusFilter');
-  const unfixed = filtered.filter(d => unrepairedStatuses.includes(d.status)).length;
-  const toVerify = filtered.filter(d => d.status === '已修复待验证').length;
   st.options[0].textContent = `缺陷状态：全部 (${unfixed+toVerify} 条)`;
   st.options[1].textContent = `缺陷状态：未修复 (${unfixed} 条)`;
   st.options[2].textContent = `缺陷状态：已修复待验证 (${toVerify} 条)`;
-  // 组别筛选（由updateGroupSelect动态生成，这里只更新全部组别计数）
+  // 组别筛选
   const gs = document.getElementById('groupSelect');
   if(gs.options.length > 0) gs.options[0].textContent = `全部组别 (${filtered.length} 条)`;
-  // 严重程度筛选
+  // 严重程度筛选 — 基于unrepaired数据
   const sv = document.getElementById('severitySelect');
   const sevCounts = {};
   filtered.forEach(d => {
@@ -847,7 +818,7 @@ function renderToVerify() {
   </tr>`).join('');
 }
 
-function refreshAll() { renderOverview(); renderTrend(); renderRoundChart(); renderGroupChart(); renderGroupList(); renderTrChart(); renderSevere(); renderToVerify(); }
+function refreshAll() { renderOverview(); renderTrend(); renderRoundChart(); renderGroupChart(); renderGroupList(); renderTrChart(); }
 
 document.addEventListener('DOMContentLoaded', init);
 </script>
