@@ -148,13 +148,13 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
       <div class="list-col">
         <h3>📋 缺陷明细 <small style="color:#999;font-weight:400;">（未修复 + 已修复待验证）</small></h3>
         <div class="lc" style="flex-wrap:wrap; gap:6px;">
-          <select id="statusFilter" onchange="renderGroupList()">
+          <select id="statusFilter" onchange="updateGroupSelect();renderGroupList()">
             <option value="all">缺陷状态：全部</option>
             <option value="unfixed">缺陷状态：未修复</option>
             <option value="to_verify">缺陷状态：已修复待验证</option>
           </select>
           <select id="groupSelect" onchange="onGroupChange()"></select>
-          <select id="severitySelect" onchange="renderGroupList()">
+          <select id="severitySelect" onchange="updateGroupSelect();renderGroupList()">
             <option value="all">严重程度：全部</option>
             <option value="严重">严重程度：严重</option>
             <option value="一般">严重程度：一般</option>
@@ -322,8 +322,25 @@ function updateModelTags() {
 }
 
 function initGroupSelect() {
-  const sel = document.getElementById('groupSelect'); sel.innerHTML = '';
-  DATA.GROUP_NAMES.forEach(g => { const o = document.createElement('option'); o.value=g; o.textContent=g; sel.appendChild(o); });
+  updateGroupSelect();
+}
+
+function updateGroupSelect() {
+  const unrepairedStatuses = ['开启', '修复中', '已分配', '正在审阅', '测试审核', '已拒绝'];
+  const statusFilter = document.getElementById('statusFilter').value;
+  // 根据状态筛选框获取可用的组别
+  let items = DATA.ALL_DETAILS.filter(d => selModels.includes(d.model));
+  if (statusFilter === 'unfixed') items = items.filter(d => unrepairedStatuses.includes(d.status));
+  else if (statusFilter === 'to_verify') items = items.filter(d => d.status === '已修复待验证');
+  else items = items.filter(d => unrepairedStatuses.includes(d.status) || d.status === '已修复待验证');
+  const groups = new Set(items.map(d => d.group).filter(Boolean));
+  const sorted = ['全部组别', ...Array.from(groups).sort()];
+  const sel = document.getElementById('groupSelect');
+  sel.innerHTML = '';
+  sorted.forEach(g => { const o = document.createElement('option'); o.value=g; o.textContent=g; sel.appendChild(o); });
+  // 如果之前选的组别不在新列表中，重置为全部
+  if (!sorted.includes(selGroup)) selGroup = '全部组别';
+  sel.value = selGroup;
 }
 
 function filterByModel(items) {
