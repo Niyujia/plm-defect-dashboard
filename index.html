@@ -147,8 +147,19 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
       <div class="chart-col"><h3>📊 各组缺陷数量分布 <small style="color:#999;font-weight:400;">（Skill A 公式）</small></h3><div class="chart-wrap"><canvas id="groupChart"></canvas></div></div>
       <div class="list-col">
         <h3>📋 缺陷明细</h3>
-        <div class="lc">
+        <div class="lc" style="flex-wrap:wrap; gap:6px;">
           <select id="groupSelect" onchange="onGroupChange()"></select>
+          <select id="severitySelect" onchange="renderGroupList()">
+            <option value="all">全部严重程度</option>
+            <option value="严重">严重</option>
+            <option value="一般">一般</option>
+            <option value="优化建议">优化建议</option>
+          </select>
+          <select id="verifySelect" onchange="renderGroupList()">
+            <option value="all">全部状态</option>
+            <option value="verify_hw">已修复待验证 - 硬件测试组</option>
+            <option value="verify_sw">已修复待验证 - 软件测试组</option>
+          </select>
           <span class="cnt" id="listCount"></span>
         </div>
         <div class="list-scroll">
@@ -407,8 +418,20 @@ function onGroupChange() {
 }
 
 function renderGroupList() {
-  const filtered = getSkillADetails();
-  let items = selGroup === '全部组别' ? filtered : filtered.filter(d => d.group === selGroup);
+  let items = getSkillADetails();
+  // 筛选1: 组别
+  if (selGroup !== '全部组别') items = items.filter(d => d.group === selGroup);
+  // 筛选2: 严重程度
+  const sevFilter = document.getElementById('severitySelect').value;
+  if (sevFilter !== 'all') {
+    if(sevFilter==='严重') items = items.filter(d => (d.severity||'').includes('致命')||(d.severity||'').includes('严重'));
+    else if(sevFilter==='一般') items = items.filter(d => (d.severity||'').includes('一般')||(!(d.severity||'').includes('致命')&&!(d.severity||'').includes('严重')&&!(d.severity||'').includes('建议')));
+    else if(sevFilter==='优化建议') items = items.filter(d => (d.severity||'').includes('建议'));
+  }
+  // 筛选3: 已修复待验证
+  const verifyFilter = document.getElementById('verifySelect').value;
+  if (verifyFilter === 'verify_hw') items = items.filter(d => d.status === '已修复待验证' && d.group === '测试部硬件测试');
+  else if (verifyFilter === 'verify_sw') items = items.filter(d => d.status === '已修复待验证' && d.group === '测试部软件测试');
   document.getElementById('listCount').textContent = `共 ${items.length} 条`;
   document.getElementById('listBody').innerHTML = '';
   items.slice(0,200).forEach(d => {
