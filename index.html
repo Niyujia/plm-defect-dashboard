@@ -144,7 +144,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
   </div>
   <div id="panel-groups" class="tab-panel">
     <div class="stats-row">
-      <div class="chart-col"><h3>📊 各组缺陷数量分布 <small style="color:#999;font-weight:400;">（Skill A 公式）</small></h3><div class="chart-wrap"><canvas id="groupChart"></canvas></div></div>
+      <div class="chart-col"><h3>📊 各组未修复缺陷分布 <small style="color:#999;font-weight:400;">（未修复状态，按严重程度分层）</small></h3><div class="chart-wrap"><canvas id="groupChart"></canvas></div></div>
       <div class="list-col">
         <h3>📋 缺陷明细 <small style="color:#999;font-weight:400;">（未修复 + 已修复待验证）</small></h3>
         <div class="lc" style="flex-wrap:wrap; gap:6px;">
@@ -328,17 +328,23 @@ function initGroupSelect() {
 function updateGroupSelect() {
   const unrepairedStatuses = ['开启', '修复中', '已分配', '正在审阅', '测试审核', '已拒绝'];
   const statusFilter = document.getElementById('statusFilter').value;
-  // 根据状态筛选框获取可用的组别
   let items = DATA.ALL_DETAILS.filter(d => selModels.includes(d.model));
   if (statusFilter === 'unfixed') items = items.filter(d => unrepairedStatuses.includes(d.status));
   else if (statusFilter === 'to_verify') items = items.filter(d => d.status === '已修复待验证');
   else items = items.filter(d => unrepairedStatuses.includes(d.status) || d.status === '已修复待验证');
-  const groups = new Set(items.map(d => d.group).filter(Boolean));
-  const sorted = ['全部组别', ...Array.from(groups).sort()];
+  // 统计各组数量
+  const groupCounts = {};
+  items.forEach(d => { groupCounts[d.group] = (groupCounts[d.group]||0)+1; });
+  const groups = Object.keys(groupCounts).filter(Boolean);
+  const sorted = ['全部组别', ...groups.sort()];
   const sel = document.getElementById('groupSelect');
   sel.innerHTML = '';
-  sorted.forEach(g => { const o = document.createElement('option'); o.value=g; o.textContent=g; sel.appendChild(o); });
-  // 如果之前选的组别不在新列表中，重置为全部
+  sorted.forEach(g => {
+    const o = document.createElement('option');
+    o.value = g;
+    o.textContent = g === '全部组别' ? `全部组别 (${items.length} 条)` : `${g} (${groupCounts[g]} 条)`;
+    sel.appendChild(o);
+  });
   if (!sorted.includes(selGroup)) selGroup = '全部组别';
   sel.value = selGroup;
 }
@@ -383,50 +389,82 @@ function getSkillADetails() {
 
 function renderGroupChart() {
   const ctx = document.getElementById('groupChart').getContext('2d');
-  const filtered = getSkillADetails();
-  const allGroupNames = DATA.GROUP_NAMES.filter(g => g !== '全部组别');
-  const counts = {};
-  filtered.forEach(d => { counts[d.group] = (counts[d.group]||0)+1; });
-  const labels = allGroupNames;
-  const values = labels.map(g => counts[g]||0);
-  const colors = labels.map(g => DATA.GROUP_COLORS[g]||'#e0e0e0');
+  const unrepairedStatuses = ['开启', '修复中', '已分配', '正在审阅', '测试审核', '已拒绝'];
+  // 数据源: 所有未修复项（按机型筛选）
+  const filtered = DATA.ALL_DETAILS.filter(d =>
+    selModels.includes(d.model) &&
+    unrepairedStatuses.includes(d.status)
+  );
+  const groups = new Set(filtered.map(d => d.group).filter(Boolean));
+  const labels = Array.from(groups).sort();
+  // 按组统计严重程度
+  const severeVals = [], normalVals = [], suggestVals = [];
+  labels.forEach(g => {
+    const items = filtered.filter(d => d.group === g);
+    const sev = (d) => { const s = d.severity||''; if(s.includes('致命')||s.includes('严重')) return 'severe'; if(s.includes('建议')) return 'sug'; return 'norm'; };
+    const bySev = {severe:0,norm:0,sug:0};
+    items.forEach(d => { bySev[sev(d)]++; });
+    severeVals.push(bySev.severe);
+    normalVals.push(bySev.norm);
+    suggestVals.push(bySev.sug);
+  });
   if(groupChart) groupChart.destroy();
   groupChart = new Chart(ctx, {
-    type:'bar', data:{ labels, datasets:[{ label:'缺陷数量', data:values, backgroundColor:colors, borderColor:colors, borderWidth:1, borderRadius:4 }] },
+    type:'bar', data:{
+      labels,
+      datasets:[
+        { label:'严重', data:severeVals, backgroundColor:'#e53935', borderColor:'#c62828', borderWidth:1, borderRadius:0, stack:'grp' },
+        { label:'一般', data:normalVals, backgroundColor:'#fb8c00', borderColor:'#e65100', borderWidth:1, borderRadius:0, stack:'grp' },
+        { label:'优化建议', data:suggestVals, backgroundColor:'#43a047', borderColor:'#2e7d32', borderWidth:1, borderRadius:4, stack:'grp' }
+      ]
+    },
     options:{
       responsive:true, maintainAspectRatio:false, indexAxis:'y',
       plugins:{
-        legend:{display:false},
+        legend:{position:'top',labels:{usePointStyle:true,padding:12,font:{size:10}}},
         tooltip:{ backgroundColor:'rgba(0,0,0,.8)', padding:10, cornerRadius:6 },
         datalabels:{
-          anchor:'end', align:'end', offset:2,
-          font:{weight:'bold',size:10},
-          color:'#444',
+          anchor:'center',color:'#fff',font:{weight:'bold',size:9},
           formatter:function(v){ return v>0?v:''; }
         }
       },
       scales:{
-        x:{ beginAtZero:true, ticks:{stepSize:1,font:{size:11}}, grid:{color:'rgba(0,0,0,.06)'} },
-        y:{ ticks:{font:{size:11}}, grid:{display:false} }
+        x:{ stacked:true, beginAtZero:true, ticks:{stepSize:1,font:{size:11}}, grid:{color:'rgba(0,0,0,.06)'} },
+        y:{ stacked:true, ticks:{font:{size:11}}, grid:{display:false} }
       }
     },
     plugins: [ChartDataLabels]
   });
-  // 更新下拉菜单显示各组的数量
-  updateGroupSelectCounts(counts);
+  updateGroupSelectCounts(filtered);
 }
 
-function updateGroupSelectCounts(counts) {
-  const sel = document.getElementById('groupSelect');
-  const total = getSkillADetails().length;
-  if(sel.options.length > 0) {
-    sel.options[0].textContent = `全部组别 (${total} 条)`;
-  }
-  for(let i=1; i<sel.options.length; i++) {
-    const g = sel.options[i].value;
-    const c = counts[g]||0;
-    sel.options[i].textContent = `${g} (${c} 条)`;
-  }
+function updateGroupSelectCounts(filtered) {
+  // 更新所有3个筛选框的数量标记
+  const unrepairedStatuses = ['开启', '修复中', '已分配', '正在审阅', '测试审核', '已拒绝'];
+  // 状态筛选
+  const st = document.getElementById('statusFilter');
+  const unfixed = filtered.filter(d => unrepairedStatuses.includes(d.status)).length;
+  const toVerify = filtered.filter(d => d.status === '已修复待验证').length;
+  st.options[0].textContent = `缺陷状态：全部 (${unfixed+toVerify} 条)`;
+  st.options[1].textContent = `缺陷状态：未修复 (${unfixed} 条)`;
+  st.options[2].textContent = `缺陷状态：已修复待验证 (${toVerify} 条)`;
+  // 组别筛选（由updateGroupSelect动态生成，这里只更新全部组别计数）
+  const gs = document.getElementById('groupSelect');
+  if(gs.options.length > 0) gs.options[0].textContent = `全部组别 (${filtered.length} 条)`;
+  // 严重程度筛选
+  const sv = document.getElementById('severitySelect');
+  const sevCounts = {};
+  filtered.forEach(d => {
+    const s = d.severity||'';
+    if(s.includes('致命')||s.includes('严重')) sevCounts['严重']=(sevCounts['严重']||0)+1;
+    else if(s.includes('建议')) sevCounts['优化建议']=(sevCounts['优化建议']||0)+1;
+    else sevCounts['一般']=(sevCounts['一般']||0)+1;
+  });
+  const allSev = (sevCounts['严重']||0)+(sevCounts['一般']||0)+(sevCounts['优化建议']||0);
+  sv.options[0].textContent = `严重程度：全部 (${allSev} 条)`;
+  sv.options[1].textContent = `严重程度：严重 (${sevCounts['严重']||0} 条)`;
+  sv.options[2].textContent = `严重程度：一般 (${sevCounts['一般']||0} 条)`;
+  sv.options[3].textContent = `严重程度：优化建议 (${sevCounts['优化建议']||0} 条)`;
 }
 
 function onGroupChange() {
