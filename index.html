@@ -788,7 +788,7 @@ function renderTrChart() {
     }
     const includePhases = name === '结项' ? ['结项','TR1','TR2','TR3','TR4'] : trPhases.slice(0, trPhases.indexOf(name)+1);
     // 结项节点：缺陷总数与总览一致 = 全量（剔除测试审核不通过关闭/已取消）
-    const total = name === '结项' ? filtered.length - tr1Total : Math.max(0, filtered.filter(d => includePhases.includes(d.resolvePhase)).length - tr1Total);
+    const total = name === '结项' ? filtered.length : Math.max(0, filtered.filter(d => includePhases.includes(d.resolvePhase)).length - tr1Total);
     const closed = filtered.filter(d => (d.status==='已关闭'||d.status==='评审关闭'||d.status==='已解决') && d.round !== 'TR1' && (name === '结项' ? true : includePhases.includes(d.resolvePhase))).length;
     const rate = total>0 ? parseFloat((closed/total*100).toFixed(1)) : 0;
     results.push({ node:name, total, closed, rate, target:trTargets[name]||0 });
