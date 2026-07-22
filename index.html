@@ -160,7 +160,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
   </div>
   <div id="panel-groups" class="tab-panel">
     <div class="stats-row">
-      <div class="chart-col"><h3>📊 各组未修复缺陷分布 <small style="color:#999;font-weight:400;">（未修复状态，按严重程度分层）</small></h3><div class="chart-wrap"><canvas id="groupChart"></canvas></div></div>
+      <div class="chart-col"><h3>📊 各组未修复缺陷分布 <small style="color:#999;font-weight:400;">（未修复状态，按缺陷等级分层）</small></h3><div class="chart-wrap"><canvas id="groupChart"></canvas></div></div>
       <div class="list-col">
         <h3>📋 缺陷明细 <small style="color:#999;font-weight:400;">（未修复 + 已修复待验证）</small></h3>
         <div class="lc" style="flex-wrap:wrap; gap:6px;">
@@ -174,15 +174,15 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
             <div class="group-menu" id="groupMenu"></div>
           </div>
           <select id="severitySelect" onchange="updateGroupSelect();updateFilterSevCounts();renderGroupList()">
-            <option value="all">严重程度：全部</option>
-            <option value="严重">严重程度：严重</option>
-            <option value="一般">严重程度：一般</option>
-            <option value="优化建议">严重程度：优化建议</option>
+            <option value="all">缺陷等级：全部</option>
+            <option value="严重">缺陷等级：严重</option>
+            <option value="一般">缺陷等级：一般</option>
+            <option value="优化建议">缺陷等级：优化建议</option>
           </select>
           <span class="cnt" id="listCount"></span>
         </div>
         <div class="list-scroll">
-          <table><thead><tr><th>编号</th><th>描述</th><th>责任人</th><th>机型</th><th>状态</th><th>严重程度</th></tr></thead><tbody id="listBody"></tbody></table>
+          <table><thead><tr><th>编号</th><th>描述</th><th>责任人</th><th>机型</th><th>状态</th><th>缺陷等级</th></tr></thead><tbody id="listBody"></tbody></table>
         </div>
       </div>
     </div>
@@ -527,10 +527,10 @@ function updateFilterSevCounts() {
     else if(s.includes('建议')) sc['优化建议']=(sc['优化建议']||0)+1;
     else sc['一般']=(sc['一般']||0)+1;
   });
-  sv.options[0].textContent = `严重程度：全部 (${(sc['严重']||0)+(sc['一般']||0)+(sc['优化建议']||0)} 条)`;
-  sv.options[1].textContent = `严重程度：严重 (${sc['严重']||0} 条)`;
-  sv.options[2].textContent = `严重程度：一般 (${sc['一般']||0} 条)`;
-  sv.options[3].textContent = `严重程度：优化建议 (${sc['优化建议']||0} 条)`;
+  sv.options[0].textContent = `缺陷等级：全部 (${(sc['严重']||0)+(sc['一般']||0)+(sc['优化建议']||0)} 条)`;
+  sv.options[1].textContent = `缺陷等级：严重 (${sc['严重']||0} 条)`;
+  sv.options[2].textContent = `缺陷等级：一般 (${sc['一般']||0} 条)`;
+  sv.options[3].textContent = `缺陷等级：优化建议 (${sc['优化建议']||0} 条)`;
 }
 
 function renderGroupList() {
@@ -549,7 +549,7 @@ function renderGroupList() {
       return selGroups.includes(d.group);
     });
   }
-  // 筛选3: 严重程度
+  // 筛选3: 缺陷等级
   const sevFilter = document.getElementById('severitySelect').value;
   if (sevFilter === '严重') items = items.filter(d => (d.severity||'').includes('致命')||(d.severity||'').includes('严重'));
   else if (sevFilter === '一般') items = items.filter(d => (d.severity||'').includes('一般')||(!(d.severity||'').includes('致命')&&!(d.severity||'').includes('严重')&&!(d.severity||'').includes('建议')));
