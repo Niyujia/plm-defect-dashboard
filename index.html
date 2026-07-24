@@ -866,8 +866,10 @@ function handleRefresh() {
     ptext.textContent = '更新完成！';
     // 替换 DATA 并重新渲染
     DATA = data.data;
-    // 更新数据源显示
-    document.querySelector('.file-info').textContent = '📡 实时数据 (PLM API)';
+    // 更新数据源显示为具体时间
+    const now = new Date();
+    const ts = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+    document.querySelector('.file-info').textContent = '📡 PLM实时 ' + ts;
     init();
     btn.textContent = '✅ 刷新成功';
     setTimeout(function() {
