@@ -340,18 +340,25 @@ class RefreshHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def sse_send(self, event, data_dict):
-        """发送SSE事件"""
-        payload = json.dumps(data_dict, ensure_ascii=False)
-        self.wfile.write(f'event: {event}\ndata: {payload}\n\n'.encode('utf-8'))
-        self.wfile.flush()
+        """发送SSE事件，忽略连接断开错误"""
+        try:
+            payload = json.dumps(data_dict, ensure_ascii=False)
+            self.wfile.write(f'event: {event}\ndata: {payload}\n\n'.encode('utf-8'))
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            # 客户端断开连接，忽略
+            pass
 
     def handle_refresh(self):
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/event-stream;charset=utf-8')
-        self.send_header('Cache-Control', 'no-cache')
-        self.send_header('Connection', 'keep-alive')
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
+        try:
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/event-stream;charset=utf-8')
+            self.send_header('Cache-Control', 'no-cache')
+            self.send_header('Connection', 'keep-alive')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+        except Exception:
+            return  # 连响应头都发不出去，直接放弃
 
         try:
             # Step 1: 获取Token
