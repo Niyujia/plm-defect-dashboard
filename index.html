@@ -40,8 +40,9 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
 .refresh-btn { padding:6px 14px; border:none; border-radius:6px; font-size:12px; background:rgba(255,255,255,.2); color:white; cursor:pointer; white-space:nowrap; }
 .refresh-btn:hover { background:rgba(255,255,255,.35); }
 .refresh-btn:disabled { opacity:.4; cursor:not-allowed; }
-.progress-wrap { width:80px; height:6px; background:rgba(255,255,255,.2); border-radius:3px; overflow:hidden; }
-.progress-bar { height:100%; width:0%; background:#4caf50; border-radius:3px; transition:width .3s; }
+.progress-wrap { width:80px; height:6px; background:rgba(255,255,255,.2); border-radius:3px; overflow:hidden; transition:width .3s; }
+.progress-bar { height:100%; width:0%; background:linear-gradient(90deg,#4caf50,#8bc34a); border-radius:3px; transition:width .3s; }
+.progress-text { font-size:11px; color:rgba(255,255,255,0.9); white-space:nowrap; }
 
 .group-dropdown { position:relative; display:inline-block; }
 .group-dropdown-btn { padding:4px 10px; border:1px solid #ccc; border-radius:4px; background:white; font-size:13px; cursor:pointer; white-space:nowrap; min-width:140px; text-align:left; color:#333; }
@@ -127,8 +128,8 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
   <div class="header-right">
     <div class="file-info">📁 数据源：产品问题报表-20260724-01.xlsx</div>
     <div class="progress-wrap" id="progressWrap"><div class="progress-bar" id="progressBar"></div></div>
+    <span class="progress-text" id="progressText" style="display:none;font-size:11px;color:rgba(255,255,255,0.9);white-space:nowrap;"></span>
     <button class="refresh-btn" id="refreshBtn" onclick="handleRefresh()">🔄 刷新数据</button>
-    <input type="file" id="fileInput" accept=".xlsx" style="display:none" onchange="handleFileUpload(event)">
     <div class="header-time" id="headerTime"></div>
   </div>
 </div>
@@ -838,20 +839,55 @@ function renderTrChart() {
   ).join('');
 }
 
-// ===== 数据刷新 =====
+// ===== 数据刷新（SSE自动刷新） =====
 function handleRefresh() {
   const btn = document.getElementById('refreshBtn');
+  const pwrap = document.getElementById('progressWrap');
   const bar = document.getElementById('progressBar');
+  const ptext = document.getElementById('progressText');
   btn.disabled = true; btn.textContent = '⏳ 获取中...';
-  bar.style.width = '10%';
-  // 打开 PLM 页面让用户下载
-  window.open(PLM_EXPORT_URL, '_blank');
-  bar.style.width = '40%';
-  // 延迟显示文件上传提示，等待用户下载后上传
-  setTimeout(function() {
-    bar.style.width = '60%';
-    document.getElementById('fileInput').click();
-  }, 1500);
+  pwrap.style.width = '160px';
+  bar.style.width = '5%';
+  ptext.textContent = '正在连接...';
+  ptext.style.display = 'block';
+
+  // 创建 EventSource
+  const es = new EventSource('/api/refresh');
+
+  es.addEventListener('progress', function(e) {
+    const data = JSON.parse(e.data);
+    bar.style.width = data.pct + '%';
+    ptext.textContent = data.msg;
+  });
+
+  es.addEventListener('complete', function(e) {
+    const data = JSON.parse(e.data);
+    bar.style.width = '100%';
+    ptext.textContent = '更新完成！';
+    // 替换 DATA 并重新渲染
+    DATA = data.data;
+    // 更新数据源显示
+    document.querySelector('.file-info').textContent = '📡 实时数据 (PLM API)';
+    init();
+    btn.textContent = '✅ 刷新成功';
+    setTimeout(function() {
+      btn.disabled = false; btn.textContent = '🔄 刷新数据';
+      bar.style.width = '0%';
+      ptext.style.display = 'none';
+      pwrap.style.width = '80px';
+    }, 2000);
+    es.close();
+  });
+
+  es.addEventListener('error', function(e) {
+    let msg = '刷新失败';
+    try { const d = JSON.parse(e.data); if(d.msg) msg = d.msg; } catch(ex) {}
+    bar.style.width = '0%';
+    ptext.textContent = msg;
+    btn.disabled = false; btn.textContent = '❌ 重试';
+    setTimeout(function() { ptext.style.display = 'none'; }, 3000);
+    es.close();
+  });
 }
 
 function handleFileUpload(event) {
