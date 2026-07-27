@@ -114,6 +114,10 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
 </style>
 </head>
 <body>
+<div id="initErrorBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;background:#D32F2F;color:#fff;padding:12px 20px;font-size:14px;text-align:center;font-weight:600;">
+  ⚠️ 数据加载失败，请尝试 Ctrl+Shift+R 强制刷新或 F12 查看 Console 报错
+  <span style="float:right;cursor:pointer;font-weight:400" onclick="this.parentElement.style.display='none'">✕ 关闭</span>
+</div>
 
 <div class="header">
   <h1>📊 PLM缺陷看板</h1>
@@ -199,6 +203,7 @@ let groupChart = null, trendChart = null, roundChart = null, trChart = null;
 
 // ===== Init =====
 function init() {
+  try {
   // 默认全选所有机型
   selModels = [...DATA.MODELS];
   selGroups = [];
@@ -224,8 +229,11 @@ function init() {
     const dd = document.getElementById('modelDropdown');
     if (!dd.contains(e.target)) document.getElementById('modelMenu').classList.remove('show');
   });
+} catch(e) {
+  console.error('init() error:', e);
+  try { document.getElementById('initErrorBanner').style.display='block'; } catch(ex) {}
 }
-
+}
 function initModelMenu() {
   const menu = document.getElementById('modelMenu');
   // 搜索框
