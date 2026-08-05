@@ -626,11 +626,8 @@ function exportGroupDetails() {
     {wch:16},{wch:50},{wch:12},{wch:12},{wch:14},{wch:10},{wch:12},{wch:14},{wch:16}
   ];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, '各组缺陷明细');
-  const now = new Date();
-  const ds = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
-  const groupLabel = selGroups.length > 0 ? selGroups.join('_') : '全部组别';
-  XLSX.writeFile(wb, `各组缺陷明细_${groupLabel}_${ds}.xlsx`);
+  XLSX.utils.book_append_sheet(wb, ws, '缺陷明细');
+  XLSX.writeFile(wb, '缺陷明细.xlsx');
 }
 
 // ===== 负责人近5天走势（Tab: persons） =====
