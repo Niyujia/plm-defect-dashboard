@@ -637,6 +637,13 @@ function exportGroupDetails() {
 
 // ===== 负责人近5天走势（Tab: persons） =====
 const PERSON_EXCLUDE_STATUSES = ['测试审核不通过关闭', '已修复待验证', '已关闭', '评审关闭'];
+// 高饱和鲜艳调色板，用于区分不同责任人（按索引循环取色）
+const PERSON_COLORS = [
+  '#e53935','#1e88e5','#43a047','#f4511e','#8e24aa',
+  '#fb8c00','#00acc1','#c0ca33','#6d4c41','#5e35b1',
+  '#3949ab','#d81b60','#00897b','#fdd835','#7cb342',
+  '#f06292','#039be5','#c2185b','#7b1fa2','#558b2f'
+];
 
 function getActiveModels() {
   // 当前所选机型；未选则视为全选（支持所有机型，如 N82L）
@@ -716,7 +723,12 @@ function renderPersonTrend() {
   headHtml += '</tr>';
   thead.innerHTML = headHtml;
   let bodyHtml = '';
-  const personKeys = members.filter(m => m && m !== 'nan');
+  const allPersonKeys = members.filter(m => m && m !== 'nan');
+  // 仅保留近5天有缺陷数量（合计>0）的负责人
+  const personKeys = allPersonKeys.filter(p => {
+    const counts = byPerson[p] || [];
+    return counts.reduce((a, b) => a + (b || 0), 0) > 0;
+  });
   personKeys.forEach(p => {
     const counts = byPerson[p] || dates.map(() => 0);
     bodyHtml += `<tr><td style="white-space:nowrap;font-weight:500;">${p}</td>`;
@@ -734,18 +746,18 @@ function renderPersonTrend() {
   // 折线图
   const ctx = document.getElementById('personChart').getContext('2d');
   if (personChart) personChart.destroy();
-  if (labels.length === 0) return;
+  if (labels.length === 0 || personKeys.length === 0) return;
   const datasets = personKeys.map((p, i) => {
     const counts = byPerson[p] || dates.map(() => 0);
     return {
       label: p,
       data: counts,
-      borderColor: DATA.GROUP_COLORS[groupName] || '#1a237e',
+      borderColor: PERSON_COLORS[i % PERSON_COLORS.length],
       backgroundColor: 'rgba(0,0,0,0)',
       tension: .3,
       pointRadius: 3,
       pointHoverRadius: 5,
-      borderWidth: 2,
+      borderWidth: 2.5,
       spanGaps: true
     };
   });
