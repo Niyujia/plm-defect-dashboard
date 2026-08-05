@@ -195,19 +195,24 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
   </div>
   <div id="panel-persons" class="tab-panel">
     <div class="trend-section" style="margin-bottom:16px;">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
         <h3 style="margin:0;">👤 负责人近5天未修复缺陷走势 <small style="color:#999;font-weight:400;">（Skill A口径：未修复缺陷数，机型 UN10/UN10R/UN10P/UN10RS）</small></h3>
         <div style="margin-left:auto;">
           <label style="font-size:13px;color:#555;">组别：</label>
           <select id="personGroupSelect" onchange="renderPersonTrend()" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;outline:none;min-width:180px;"></select>
         </div>
       </div>
-      <div class="chart-container" style="min-height:380px;"><canvas id="personChart"></canvas></div>
     </div>
-    <div class="trend-section">
-      <h3>📊 各责任人每日未修复缺陷数量 <small style="color:#999;font-weight:400;">（左列=责任人，横行=日期及数量）</small></h3>
-      <div class="list-scroll" style="max-height:480px;">
-        <table class="trend-table" id="personTrendTable"><thead></thead><tbody></tbody></table>
+    <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;">
+      <div class="trend-section" style="flex:1; min-width:320px;">
+        <h3>📊 各责任人每日未修复缺陷数量 <small style="color:#999;font-weight:400;">（左列=责任人，横行=日期及数量）</small></h3>
+        <div class="list-scroll" style="max-height:520px;">
+          <table class="trend-table" id="personTrendTable"><thead></thead><tbody></tbody></table>
+        </div>
+      </div>
+      <div class="trend-section" style="flex:1; min-width:320px;">
+        <h3>📈 近5天走势图 <small style="color:#999;font-weight:400;">（横轴=日期，每条线=一名责任人）</small></h3>
+        <div class="chart-container" style="min-height:520px;"><canvas id="personChart"></canvas></div>
       </div>
     </div>
   </div>
