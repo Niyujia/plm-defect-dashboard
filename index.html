@@ -394,6 +394,9 @@ function updateGroupSelect() {
   }
   html += '<div class="grp-actions"><button onclick="selectAllGroups()">全选</button><button onclick="deselectAllGroups()">清空</button></div>';
   menu.innerHTML = html;
+  // 收敛已选组别：移除当前下拉中已不存在的组（如机型切换后该组无数据）
+  const validValues = new Set(Array.from(menu.querySelectorAll('input')).map(c => c.value));
+  selGroups = selGroups.filter(g => validValues.has(g));
   // 初次加载全选
   if (selGroups.length === 0) selectAllGroups();
   updateGroupDropdownLabel();
@@ -1348,7 +1351,7 @@ function renderToVerify() {
   </tr>`).join('');
 }
 
-function refreshAll() { renderOverview(); renderTrend(); renderRoundChart(); renderGroupChart(); renderGroupList(); renderTrChart(); renderPersonTrend(); }
+function refreshAll() { updateGroupSelect(); renderOverview(); renderTrend(); renderRoundChart(); renderGroupChart(); renderGroupList(); renderTrChart(); renderPersonTrend(); }
 
 document.addEventListener('DOMContentLoaded', init);
 </script>
