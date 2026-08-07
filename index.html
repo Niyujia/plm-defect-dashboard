@@ -206,13 +206,15 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
     <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;">
       <div class="trend-section" style="flex:1; min-width:320px;">
         <h3>📊 各责任人每日未修复缺陷数量 <small style="color:#999;font-weight:400;">（左列=责任人，横行=日期及数量）</small></h3>
-        <div class="list-scroll" style="max-height:520px;">
+        <div class="list-scroll" style="max-height:560px;">
           <table class="trend-table" id="personTrendTable"><thead></thead><tbody></tbody></table>
         </div>
       </div>
       <div class="trend-section" style="flex:1; min-width:320px;">
         <h3>📈 近5天走势图 <small style="color:#999;font-weight:400;">（横轴=日期，每条线=一名责任人）</small></h3>
-        <div class="chart-container" style="min-height:520px;"><canvas id="personChart"></canvas></div>
+        <div class="chart-container" style="min-height:250px;"><canvas id="personChart"></canvas></div>
+        <h3 style="margin-top:18px;">📊 组内各负责人缺陷数量 <small style="color:#999;font-weight:400;">（近5天合计，按数量降序）</small></h3>
+        <div class="chart-container" style="min-height:250px;"><canvas id="personBarChart"></canvas></div>
       </div>
     </div>
   </div>
@@ -223,7 +225,7 @@ const DATA = {"MODELS": ["AI", "CT20", "CT20P", "D20", "EF20", "EF2002", "EF60",
 
 let selModels = [];
 let selGroups = [];  // 多选组别
-let groupChart = null, trendChart = null, roundChart = null, trChart = null, personChart = null;
+let groupChart = null, trendChart = null, roundChart = null, trChart = null, personChart = null, personBarChart = null;
 
 // ===== Init =====
 function init() {
@@ -250,6 +252,7 @@ function init() {
     if (this.dataset.tab === 'overview' && roundChart) roundChart.resize();
     if (this.dataset.tab === 'overview' && trChart) trChart.resize();
     if (this.dataset.tab === 'persons' && personChart) personChart.resize();
+    if (this.dataset.tab === 'persons' && personBarChart) personBarChart.resize();
   }));
   document.addEventListener('click', function(e) {
     const dd = document.getElementById('modelDropdown');
@@ -778,6 +781,49 @@ function renderPersonTrend() {
         x: { ticks: { font: { size: 11 } }, grid: { display: false } }
       }
     }
+  });
+
+  // 组内各负责人缺陷数量柱状图（近5天合计，降序）
+  const ctxBar = document.getElementById('personBarChart').getContext('2d');
+  if (personBarChart) personBarChart.destroy();
+  if (personKeys.length === 0) return;
+  const barData = personKeys.map((p, i) => ({
+    name: p,
+    value: (byPerson[p] || dates.map(() => 0)).reduce((a, b) => a + (b || 0), 0),
+    color: PERSON_COLORS[i % PERSON_COLORS.length]
+  })).sort((a, b) => b.value - a.value);
+  personBarChart = new Chart(ctxBar, {
+    type: 'bar',
+    data: {
+      labels: barData.map(d => d.name),
+      datasets: [{
+        label: '缺陷数量',
+        data: barData.map(d => d.value),
+        backgroundColor: barData.map(d => d.color),
+        borderRadius: 4,
+        maxBarThickness: 36
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { backgroundColor: 'rgba(0,0,0,.8)', padding: 10, cornerRadius: 6 },
+        datalabels: {
+          anchor: 'end',
+          align: 'top',
+          color: '#555',
+          font: { weight: 'bold', size: 10 },
+          formatter: function(v) { return v > 0 ? v : ''; }
+        }
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } }, grid: { color: 'rgba(0,0,0,.06)' } },
+        x: { ticks: { font: { size: 10 } }, grid: { display: false } }
+      }
+    },
+    plugins: [ChartDataLabels]
   });
 }
 
