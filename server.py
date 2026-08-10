@@ -1,8 +1,9 @@
 """
 PLM 缺陷看板后端服务
 提供静态文件服务 + /api/refresh SSE 实时刷新接口
++ 刷新页面时自动执行 Skill C(导出报表) + Skill K(重新生成看板)
 """
-import os, sys, json, time, io, re, sqlite3, traceback
+import os, sys, json, time, io, re, sqlite3, traceback, subprocess, threading
 from datetime import datetime, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
@@ -300,6 +301,116 @@ def build_dashboard_data(df, p2g):
     }
 
 
+# ── 自动刷新（Skill C 导出 + Skill K 生成） ──
+AUTO_PYTHON = r'C:/Users/niyujia/.workbuddy/binaries/python/envs/default/Scripts/python.exe'
+EXPORT_SCRIPT = r'C:/Users/niyujia/.workbuddy/skills/Skill C 自动导出缺陷列表/scripts/export_plm.py'
+GEN_SCRIPT = r'C:/Users/niyujia/.workbuddy/skills/un10-three-tab-dashboard/scripts/generate_dashboard.py'
+DEFECT_DIR = r'F:/UN10/PVT/缺陷'
+AUTO_COOLDOWN_SEC = 600  # 两次自动刷新最小间隔
+
+_refresh_lock = threading.Lock()
+_refresh_state = {
+    'running': False, 'last_start': None, 'last_finish': None,
+    'result': '', 'stage': '',
+}
+
+
+def _latest_report_info():
+    """返回 (最新报表日期YYYYMMDD, 其文件mtime)；无报表返回 (None, 0)"""
+    best_date, best_mtime = None, 0
+    try:
+        for f in os.listdir(DEFECT_DIR):
+            if '产品问题报表' not in f or not f.endswith('.xlsx') or f.startswith('~'):
+                continue
+            m = re.search(r'(\d{8})', f)
+            if not m:
+                continue
+            d = m.group(1)
+            fp = os.path.join(DEFECT_DIR, f)
+            mt = os.path.getmtime(fp)
+            if best_date is None or (d, mt) > (best_date, best_mtime):
+                best_date, best_mtime = d, mt
+    except Exception as e:
+        log(f'[AUTO] 扫描报表目录失败: {e}')
+    return best_date, best_mtime
+
+
+def _run_auto_refresh(reason):
+    """后台线程依次执行 Skill C → Skill K（防并发）"""
+    with _refresh_lock:
+        if _refresh_state['running']:
+            log(f'[AUTO] 已在运行，跳过 ({reason})')
+            return
+        _refresh_state['running'] = True
+        _refresh_state['last_start'] = datetime.now().isoformat()
+        _refresh_state['result'] = ''
+        _refresh_state['stage'] = '启动'
+
+    def worker():
+        try:
+            log(f'[AUTO] 自动刷新开始: {reason}')
+            # Step 1: Skill C 导出最新报表
+            _refresh_state['stage'] = 'Skill C 导出'
+            log('[AUTO] 执行 Skill C 导出...')
+            r1 = subprocess.run([AUTO_PYTHON, EXPORT_SCRIPT],
+                                capture_output=True, text=True, timeout=600,
+                                cwd=os.path.dirname(EXPORT_SCRIPT))
+            if r1.returncode != 0:
+                _refresh_state['result'] = f'Skill C 导出失败: {(r1.stderr or r1.stdout or "")[-500:]}'
+                log(f'[AUTO] Skill C 失败: {r1.stderr[-500:]}')
+            else:
+                log(f'[AUTO] Skill C 完成: {(r1.stdout or "")[-300:]}')
+            # Step 2: Skill K 生成看板
+            _refresh_state['stage'] = 'Skill K 生成看板'
+            log('[AUTO] 执行 Skill K 生成...')
+            r2 = subprocess.run([AUTO_PYTHON, GEN_SCRIPT],
+                                capture_output=True, text=True, timeout=600,
+                                cwd=os.path.dirname(GEN_SCRIPT))
+            if r2.returncode != 0:
+                _refresh_state['result'] = f'Skill K 失败: {(r2.stderr or r2.stdout or "")[-500:]}'
+                log(f'[AUTO] Skill K 失败: {(r2.stderr or "")[-500:]}')
+            else:
+                _refresh_state['result'] = 'ok'
+                log('[AUTO] Skill K 完成，看板已更新')
+            _refresh_state['stage'] = ''
+        except Exception as e:
+            _refresh_state['result'] = f'自动刷新异常: {e}'
+            log(f'[AUTO] 自动刷新异常: {traceback.format_exc()}')
+        finally:
+            _refresh_state['running'] = False
+            _refresh_state['last_finish'] = datetime.now().isoformat()
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def maybe_auto_refresh():
+    """页面请求时检查是否需要自动刷新，需要则后台触发 Skill C + Skill K"""
+    today = datetime.now().strftime('%Y%m%d')
+    try:
+        latest_date, latest_mtime = _latest_report_info()
+        idx_path = os.path.join(WEB_ROOT, 'index.html')
+        idx_mtime = os.path.getmtime(idx_path) if os.path.exists(idx_path) else 0
+        stale = False
+        if not latest_date:
+            stale = True  # 尚无报表 → 先导出
+        elif latest_date != today:
+            stale = True  # 最新报表不是今天 → 需重新导出+生成
+        elif idx_mtime < latest_mtime:
+            stale = True  # 报表比看板新 → 需重新生成
+        if not stale:
+            return
+        # 冷却期检查
+        last = _refresh_state['last_start']
+        if last:
+            last_dt = datetime.fromisoformat(last)
+            if (datetime.now() - last_dt).total_seconds() < AUTO_COOLDOWN_SEC:
+                log(f'[AUTO] 冷却期内跳过 (上次 {last})')
+                return
+        _run_auto_refresh(f'最新报表={latest_date or "无"} 今天={today} 看板mtime={int(idx_mtime)} 报表mtime={int(latest_mtime)}')
+    except Exception as e:
+        log(f'[AUTO] 刷新检查异常: {e}')
+
+
 # ── HTTP Server ──
 
 class RefreshHandler(BaseHTTPRequestHandler):
@@ -309,12 +420,24 @@ class RefreshHandler(BaseHTTPRequestHandler):
 
         if path == '/api/refresh':
             self.handle_refresh()
+        elif path == '/api/status':
+            self.serve_json(_refresh_state)
         elif path == '/':
+            maybe_auto_refresh()
             self.serve_static('index.html')
         else:
             # 去除前导 / 后尝试查找文件
             fname = path.lstrip('/')
             self.serve_static(fname)
+
+    def serve_json(self, obj):
+        data = json.dumps(obj, ensure_ascii=False).encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json;charset=utf-8')
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(data)
 
     def serve_static(self, filename):
         filepath = os.path.join(WEB_ROOT, filename)
