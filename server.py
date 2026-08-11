@@ -311,7 +311,7 @@ AUTO_COOLDOWN_SEC = 600  # 两次自动刷新最小间隔
 _refresh_lock = threading.Lock()
 _refresh_state = {
     'running': False, 'last_start': None, 'last_finish': None,
-    'result': '', 'stage': '',
+    'result': '', 'stage': '', 'last_api_finish': None,
 }
 
 
@@ -522,6 +522,7 @@ class RefreshHandler(BaseHTTPRequestHandler):
             time.sleep(0.3)
 
             self.sse_send('complete', {'data': data, 'total_rows': len(df)})
+            _refresh_state['last_api_finish'] = datetime.now().isoformat()
             log('刷新完成')
             # 落盘：后台执行 Skill C(导出Excel) + Skill K(重新生成index.html)，让 F5 后数据源也是最新的
             maybe_auto_refresh()

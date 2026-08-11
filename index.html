@@ -283,8 +283,17 @@ function init() {
 }
 
 function checkAutoRefresh() {
-  // 内网服务端自动刷新状态提示（GitHub Pages 无后端，请求失败自动忽略）
+  // 内网服务端自动刷新状态提示 + 数据源时间显示（GitHub Pages 无后端，请求失败自动忽略）
   fetch('/api/status').then(r => r.json()).then(s => {
+    // 服务端记录过 API 实时刷新 → 数据源标签显示获取时间点（F5 后依然显示）
+    if (s.last_api_finish) {
+      const d = new Date(s.last_api_finish);
+      const ts = d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+      const fi = document.querySelector('.file-info');
+      if (fi && fi.textContent.indexOf('产品问题报表') !== -1) {
+        fi.textContent = '📡 数据来源' + ts;
+      }
+    }
     const tip = document.getElementById('autoRefreshTip');
     if (!tip) return;
     if (s.running) {
