@@ -232,7 +232,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
       </div>
       <div class="trend-section" style="flex:1; min-width:320px;" id="personRightCol">
         <div id="personBarWrap">
-          <h3>📊 组内各负责人缺陷数量 <small style="color:#999;font-weight:400;">（近5天合计，按数量降序）</small></h3>
+          <h3>📊 组内各负责人缺陷数量 <small style="color:#999;font-weight:400;">（最新一天，按严重程度堆叠）</small></h3>
           <div class="chart-container" style="min-height:250px;"><canvas id="personBarChart"></canvas></div>
         </div>
       </div>
@@ -756,7 +756,8 @@ function aggregatePersonTrend() {
 }
 
 function aggregatePersonBarTrend() {
-  // 按当前所选机型聚合 bySevModel → 每人近5天 严重/一般/优化建议 三档合计
+  // 按当前所选机型聚合 bySevModel → 每人【最新一天】的 严重/一般/优化建议 数量
+  // （数组按日期升序，最后一个元素 = 最新一天）
   const bySevModel = (DATA.PERSON_TREND && DATA.PERSON_TREND.bySevModel) ? DATA.PERSON_TREND.bySevModel : {};
   const activeModels = getActiveModels();
   const out = {};
@@ -768,7 +769,7 @@ function aggregatePersonBarTrend() {
       if (!out[p]) out[p] = { 严重: 0, 一般: 0, 优化建议: 0 };
       sevKeys.forEach(k => {
         const arr = pc[p][k] || [];
-        out[p][k] += arr.reduce((a, b) => a + (b || 0), 0);
+        out[p][k] += arr.length > 0 ? (arr[arr.length - 1] || 0) : 0;
       });
     });
   });
@@ -851,11 +852,11 @@ function renderPersonTrend() {
     }
   });
 
-  // 组内各负责人缺陷数量柱状图（近5天合计，按严重程度堆叠，降序）
+  // 组内各负责人缺陷数量柱状图（最新一天，按严重程度堆叠，降序）
   const ctxBar = document.getElementById('personBarChart').getContext('2d');
   if (personBarChart) personBarChart.destroy();
   if (personKeys.length === 0) return;
-  const sevAgg = aggregatePersonBarTrend(); // 每人近5天 严重/一般/优化建议 三档合计
+  const sevAgg = aggregatePersonBarTrend(); // 每人最新一天 严重/一般/优化建议 数量
   const barData = personKeys.map(p => {
     const sv = sevAgg[p] || { 严重: 0, 一般: 0, 优化建议: 0 };
     return {
@@ -865,7 +866,7 @@ function renderPersonTrend() {
       sug: sv['优化建议'] || 0,
       value: (sv['严重'] || 0) + (sv['一般'] || 0) + (sv['优化建议'] || 0)
     };
-  }).sort((a, b) => b.value - a.value);
+  }).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
   personBarChart = new Chart(ctxBar, {
     type: 'bar',
     data: {
