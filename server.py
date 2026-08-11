@@ -459,6 +459,10 @@ class RefreshHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', mime)
         self.send_header('Content-Length', str(len(data)))
         self.send_header('Access-Control-Allow-Origin', '*')
+        # 禁止缓存，避免浏览器使用旧版 index.html（刷新按钮逻辑变更后仍显示旧行为）
+        self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate')
+        self.send_header('Pragma', 'no-cache')
+        self.send_header('Expires', '0')
         self.end_headers()
         self.wfile.write(data)
 
