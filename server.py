@@ -519,6 +519,8 @@ class RefreshHandler(BaseHTTPRequestHandler):
 
             self.sse_send('complete', {'data': data, 'total_rows': len(df)})
             log('刷新完成')
+            # 落盘：后台执行 Skill C(导出Excel) + Skill K(重新生成index.html)，让 F5 后数据源也是最新的
+            maybe_auto_refresh()
 
         except Exception as e:
             log(f'刷新失败: {traceback.format_exc()}')
