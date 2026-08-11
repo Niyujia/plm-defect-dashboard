@@ -91,6 +91,17 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
 .export-btn:disabled { opacity:.5; cursor:not-allowed; }
 .auto-refresh-tip { display:none; position:sticky; top:0; z-index:300; background:#fff8e1; color:#8d6e00; padding:8px 24px; font-size:13px; text-align:center; border-bottom:1px solid #ffe082; }
 .auto-refresh-tip.show { display:block; }
+.refresh-modal-mask { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:400; align-items:center; justify-content:center; }
+.refresh-modal-mask.show { display:flex; }
+.refresh-modal { background:white; border-radius:12px; padding:24px 28px; max-width:420px; width:90%; box-shadow:0 8px 30px rgba(0,0,0,.25); text-align:center; }
+.refresh-modal h3 { font-size:16px; margin-bottom:10px; color:#1a237e; }
+.refresh-modal p { font-size:13px; color:#666; margin-bottom:18px; line-height:1.7; }
+.refresh-modal .rm-actions { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+.refresh-modal .rm-btn { display:inline-block; padding:8px 18px; border:none; border-radius:6px; font-size:13px; cursor:pointer; text-decoration:none; box-sizing:border-box; }
+.rm-btn-primary { background:#1a237e; color:white; }
+.rm-btn-primary:hover { background:#283593; }
+.rm-btn-ghost { background:#f0f0f0; color:#555; }
+.rm-btn-ghost:hover { background:#e0e0e0; }
 .list-col .lc .cnt { font-size:12px; color:#888; }
 .list-scroll { flex:1; overflow-y:auto; max-height:380px; }
 .list-col table { width:100%; border-collapse:collapse; font-size:12px; }
@@ -288,6 +299,10 @@ function checkAutoRefresh() {
       }
     }
   }).catch(function() { /* 非内网环境无 /api/status，忽略 */ });
+}
+
+function closeRefreshModal() {
+  document.getElementById('refreshModal').classList.remove('show');
 }
 
 function initModelMenu() {
@@ -1183,9 +1198,9 @@ function handleRefresh() {
   const bar = document.getElementById('progressBar');
   const ptext = document.getElementById('progressText');
 
-  // GitHub Pages 等静态站点无后端服务
+  // GitHub Pages 等静态站点无后端服务，引导前往内网
   if (window.location.hostname !== '10.199.183.123' && window.location.hostname !== 'localhost') {
-    alert('⚠️ 刷新功能仅支持内网访问\n请使用内网地址：http://10.199.183.123:8080');
+    document.getElementById('refreshModal').classList.add('show');
     return;
   }
 
@@ -1379,5 +1394,17 @@ function refreshAll() { updateGroupSelect(); renderOverview(); renderTrend(); re
 
 document.addEventListener('DOMContentLoaded', init);
 </script>
+
+<!-- 非内网环境下点击刷新的引导弹窗 -->
+<div class="refresh-modal-mask" id="refreshModal">
+  <div class="refresh-modal">
+    <h3>🔒 刷新功能仅限内网使用</h3>
+    <p>GitHub Pages 是静态页面，无法连接 PLM 获取实时数据。<br>请前往内网看板使用刷新功能：<br><b style="color:#1a237e;">http://10.199.183.123:8080</b></p>
+    <div class="rm-actions">
+      <a class="rm-btn rm-btn-primary" href="http://10.199.183.123:8080" target="_blank">前往内网看板 →</a>
+      <button class="rm-btn rm-btn-ghost" onclick="closeRefreshModal()">知道了</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
