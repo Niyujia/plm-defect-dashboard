@@ -1229,10 +1229,10 @@ function handleRefresh() {
         TREND: DATA.TREND || [],
         PERSON_TREND: DATA.PERSON_TREND || { dates: [], byModel: {}, bySevModel: {} }
       });
-      // 更新数据源显示为具体时间
+      // 更新数据源显示为获取数据的时间点
       const now = new Date();
-      const ts = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
-      document.querySelector('.file-info').textContent = '📡 PLM实时 ' + ts;
+      const ts = now.getFullYear() + '/' + String(now.getMonth()+1).padStart(2,'0') + '/' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+      document.querySelector('.file-info').textContent = '📡 数据来源' + ts;
       init();
     } catch(ex) {
       console.error('刷新渲染异常:', ex);
