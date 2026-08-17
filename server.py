@@ -39,7 +39,14 @@ _COLOR_PALETTE = [
 
 def log(msg):
     ts = datetime.now().strftime('%H:%M:%S')
-    print(f'[{ts}] {msg}', flush=True)
+    line = f'[{ts}] {msg}'
+    print(line, flush=True)
+    # pythonw 无窗口运行时 stdout 不可见，同时写文件日志便于排查
+    try:
+        with open(os.path.join(WEB_ROOT, 'server.log'), 'a', encoding='utf-8') as f:
+            f.write(line + '\n')
+    except Exception:
+        pass
 
 def get_token():
     try:
