@@ -212,7 +212,11 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
     <div class="trend-section" style="margin-bottom:16px;">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
         <h3 style="margin:0;">👤 负责人近5天未修复缺陷走势 <small style="color:#999;font-weight:400;">（剔除关闭类状态，机型随页眉筛选，支持全部机型）</small></h3>
-        <div style="margin-left:auto;">
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+          <select id="personModeSelect" onchange="changePersonMode()" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;outline:none;">
+            <option value="group">按组浏览</option>
+            <option value="rank">按负责人数量排序</option>
+          </select>
           <label style="font-size:13px;color:#555;">组别：</label>
           <select id="personGroupSelect" onchange="renderPersonTrend()" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;outline:none;min-width:180px;"></select>
         </div>
@@ -785,8 +789,25 @@ function aggregatePersonBarTrend() {
   return out;
 }
 
+let personMode = 'group';
+
+function changePersonMode() {
+  personMode = document.getElementById('personModeSelect').value;
+  document.getElementById('personGroupSelect').style.display = personMode === 'group' ? '' : 'none';
+  renderPersonTrend();
+}
+
 function renderPersonTrend() {
   const dates = (DATA.PERSON_TREND && DATA.PERSON_TREND.dates) ? DATA.PERSON_TREND.dates : [];
+  const labels = dates.map(d => d.label);
+  const sevAgg = aggregatePersonBarTrend(); // 每人最新一天 严重/一般/优化建议
+
+  if (personMode === 'rank') {
+    renderPersonRank(sevAgg);
+    return;
+  }
+
+  // ── 按组模式：组内成员表格 + 走势图 + 柱状图 ──
   // 下拉随所选机型更新（保留当前选择）
   updatePersonGroupSelect(getPersonGroupCounts());
   const byPerson = aggregatePersonTrend();
@@ -794,7 +815,6 @@ function renderPersonTrend() {
   const groupName = sel ? sel.value : '';
   const group = DATA.GROUPS.find(g => g.name === groupName);
   const members = group ? group.members : [];
-  const labels = dates.map(d => d.label);
 
   // 表格
   const thead = document.querySelector('#personTrendTable thead');
@@ -827,45 +847,43 @@ function renderPersonTrend() {
   // 折线图
   const ctx = document.getElementById('personChart').getContext('2d');
   if (personChart) personChart.destroy();
-  if (labels.length === 0 || personKeys.length === 0) return;
-  const datasets = personKeys.map((p, i) => {
-    const counts = byPerson[p] || dates.map(() => 0);
-    return {
-      label: p,
-      data: counts,
-      borderColor: PERSON_COLORS[i % PERSON_COLORS.length],
-      backgroundColor: 'rgba(0,0,0,0)',
-      tension: .3,
-      pointRadius: 3,
-      pointHoverRadius: 5,
-      borderWidth: 2.5,
-      spanGaps: true
-    };
-  });
-  personChart = new Chart(ctx, {
-    type: 'line',
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, padding: 8, font: { size: 10 } } },
-        tooltip: { backgroundColor: 'rgba(0,0,0,.8)', padding: 10, cornerRadius: 6 },
-        datalabels: { display: false }
-      },
-      scales: {
-        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,.06)' } },
-        x: { ticks: { font: { size: 11 } }, grid: { display: false } }
+  if (labels.length > 0 && personKeys.length > 0) {
+    const datasets = personKeys.map((p, i) => {
+      const counts = byPerson[p] || dates.map(() => 0);
+      return {
+        label: p,
+        data: counts,
+        borderColor: PERSON_COLORS[i % PERSON_COLORS.length],
+        backgroundColor: 'rgba(0,0,0,0)',
+        tension: .3,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        borderWidth: 2.5,
+        spanGaps: true
+      };
+    });
+    personChart = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, padding: 8, font: { size: 10 } } },
+          tooltip: { backgroundColor: 'rgba(0,0,0,.8)', padding: 10, cornerRadius: 6 },
+          datalabels: { display: false }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,.06)' } },
+          x: { ticks: { font: { size: 11 } }, grid: { display: false } }
+        }
       }
-    }
-  });
+    });
+  }
 
-  // 组内各负责人缺陷数量柱状图（最新一天，按严重程度堆叠，降序）
-  const ctxBar = document.getElementById('personBarChart').getContext('2d');
-  if (personBarChart) personBarChart.destroy();
-  if (personKeys.length === 0) return;
-  const sevAgg = aggregatePersonBarTrend(); // 每人最新一天 严重/一般/优化建议 数量
+  // 柱状图（组内成员，最新一天，堆叠）
+  document.querySelector('#personBarWrap h3').innerHTML = '📊 组内各负责人缺陷数量 <small style="color:#999;font-weight:400;">（最新一天，按严重程度堆叠）</small>';
   const barData = personKeys.map(p => {
     const sv = sevAgg[p] || { 严重: 0, 一般: 0, 优化建议: 0 };
     return {
@@ -876,6 +894,54 @@ function renderPersonTrend() {
       value: (sv['严重'] || 0) + (sv['一般'] || 0) + (sv['优化建议'] || 0)
     };
   }).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
+  renderPersonBarChart(barData);
+
+  // 根据表格高度自适应布局：表格矮→左2右1，表格高→左1右2
+  relayoutPerson();
+}
+
+function renderPersonRank(sevAgg) {
+  // 排名模式：全部负责人（跨组、按所选机型），最新一天数量降序
+  const lineWrap = document.getElementById('personLineWrap');
+  lineWrap.style.display = 'none';
+  if (personChart) personChart.destroy();
+
+  const rankData = Object.keys(sevAgg).map(p => {
+    const sv = sevAgg[p] || { 严重: 0, 一般: 0, 优化建议: 0 };
+    return {
+      name: p,
+      group: matchGroup(p),
+      sev: sv['严重'] || 0,
+      norm: sv['一般'] || 0,
+      sug: sv['优化建议'] || 0,
+      value: (sv['严重'] || 0) + (sv['一般'] || 0) + (sv['优化建议'] || 0)
+    };
+  }).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
+
+  // 表格：排名/负责人/所属组/严重/一般/优化/合计（最新一天）
+  const thead = document.querySelector('#personTrendTable thead');
+  const tbody = document.querySelector('#personTrendTable tbody');
+  thead.innerHTML = '<tr><th>排名</th><th>负责人</th><th>所属组</th><th style="color:#D32F2F;">严重</th><th style="color:#1976D2;">一般</th><th style="color:#388E3C;">优化</th><th>合计</th></tr>';
+  let bodyHtml = '';
+  rankData.forEach((d, i) => {
+    bodyHtml += `<tr><td style="font-weight:700;color:#1a237e;">${i+1}</td><td style="white-space:nowrap;font-weight:500;">${d.name}</td><td style="color:#666;">${d.group}</td><td style="font-weight:600;color:#D32F2F;">${d.sev}</td><td style="font-weight:600;color:#1976D2;">${d.norm}</td><td style="font-weight:600;color:#388E3C;">${d.sug}</td><td style="font-weight:700;color:#e65100;">${d.value}</td></tr>`;
+  });
+  if (rankData.length === 0) {
+    bodyHtml = '<tr><td colspan="7" style="text-align:center;color:#999;">所选机型下暂无有缺陷的负责人</td></tr>';
+  }
+  tbody.innerHTML = bodyHtml;
+
+  // 柱状图（全部负责人排行，最新一天，堆叠，降序）
+  document.querySelector('#personBarWrap h3').innerHTML = '📊 负责人缺陷数量排行 <small style="color:#999;font-weight:400;">（全部组别，最新一天，按数量降序）</small>';
+  const barData = rankData.map(d => ({ name: d.name, sev: d.sev, norm: d.norm, sug: d.sug, value: d.value }));
+  renderPersonBarChart(barData);
+  relayoutPerson();
+}
+
+function renderPersonBarChart(barData) {
+  const ctxBar = document.getElementById('personBarChart').getContext('2d');
+  if (personBarChart) personBarChart.destroy();
+  if (barData.length === 0) return;
   personBarChart = new Chart(ctxBar, {
     type: 'bar',
     data: {
@@ -907,9 +973,6 @@ function renderPersonTrend() {
     },
     plugins: [ChartDataLabels]
   });
-
-  // 根据表格高度自适应布局：表格矮→左2右1，表格高→左1右2
-  relayoutPerson();
 }
 
 function relayoutPerson() {
@@ -921,6 +984,12 @@ function relayoutPerson() {
   const leftCol = document.getElementById('personLeftCol');
   const rightCol = document.getElementById('personRightCol');
   const tableH = tableWrap.scrollHeight;
+  if (personMode === 'rank') {
+    // 排名模式：无走势图，表格左、柱状图右
+    lineWrap.style.display = 'none';
+    if (barWrap.parentNode !== rightCol) rightCol.appendChild(barWrap);
+    return;
+  }
   lineWrap.style.display = 'block';
   if (tableH <= 330) {
     // 表格矮：走势图放左列（表格下方），右列只留柱状图
