@@ -215,16 +215,10 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
         <h3 style="margin:0;">👤 负责人近5天未修复缺陷走势 <small style="color:#999;font-weight:400;">（剔除关闭类状态，机型随页眉筛选，支持全部机型）</small></h3>
         <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
-          <select id="personModeSelect" onchange="changePersonMode()" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;outline:none;">
-            <option value="group">按组浏览</option>
-            <option value="rank">按负责人数量排序</option>
-          </select>
-          <select id="personRankSort" onchange="renderPersonTrend()" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;outline:none;display:none;">
-            <option value="count">按数量降序</option>
-            <option value="group">按组排序</option>
-          </select>
           <label style="font-size:13px;color:#555;">组别：</label>
-          <select id="personGroupSelect" onchange="renderPersonTrend()" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;outline:none;min-width:180px;"></select>
+          <select id="personGroupSelect" onchange="renderPersonTrend()" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;outline:none;min-width:180px;">
+            <option value="">全部组别</option>
+          </select>
         </div>
       </div>
     </div>
@@ -736,6 +730,11 @@ function updatePersonGroupSelect(counts) {
   const sel = document.getElementById('personGroupSelect');
   const prev = sel.value;
   sel.innerHTML = '';
+  // 始终保留"全部组别"选项
+  const allOpt = document.createElement('option');
+  allOpt.value = '';
+  allOpt.textContent = '全部组别';
+  sel.appendChild(allOpt);
   DATA.GROUPS.forEach(g => {
     const cnt = counts[g.name] || 0;
     if (cnt <= 0) return;
@@ -745,12 +744,7 @@ function updatePersonGroupSelect(counts) {
     sel.appendChild(opt);
   });
   if (sel.options.length > 0) {
-    sel.value = Array.from(sel.options).some(o => o.value === prev) ? prev : sel.options[0].value;
-  } else {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = '暂无有缺陷的组别';
-    sel.appendChild(opt);
+    sel.value = Array.from(sel.options).some(o => o.value === prev) ? prev : '';
   }
 }
 
@@ -795,102 +789,114 @@ function aggregatePersonBarTrend() {
   return out;
 }
 
-let personMode = 'group';
+let personSortDir = 'desc'; // 表格排序方向（按最新一天数量）
 
-function changePersonMode() {
-  personMode = document.getElementById('personModeSelect').value;
-  document.getElementById('personGroupSelect').style.display = personMode === 'group' ? '' : 'none';
-  document.getElementById('personRankSort').style.display = personMode === 'rank' ? '' : 'none';
+function togglePersonSort() {
+  personSortDir = personSortDir === 'desc' ? 'asc' : 'desc';
   renderPersonTrend();
 }
 
 function renderPersonTrend() {
   const dates = (DATA.PERSON_TREND && DATA.PERSON_TREND.dates) ? DATA.PERSON_TREND.dates : [];
   const labels = dates.map(d => d.label);
+  const byPerson = aggregatePersonTrend();
   const sevAgg = aggregatePersonBarTrend(); // 每人最新一天 严重/一般/优化建议
-
-  if (personMode === 'rank') {
-    renderPersonRank(sevAgg);
-    return;
-  }
-
-  // ── 按组模式：组内成员表格 + 走势图 + 柱状图 ──
   // 下拉随所选机型更新（保留当前选择）
   updatePersonGroupSelect(getPersonGroupCounts());
-  const byPerson = aggregatePersonTrend();
   const sel = document.getElementById('personGroupSelect');
   const groupName = sel ? sel.value : '';
-  const group = DATA.GROUPS.find(g => g.name === groupName);
+  const isAll = groupName === '';
+  const group = isAll ? null : DATA.GROUPS.find(g => g.name === groupName);
   const members = group ? group.members : [];
 
-  // 表格
-  const thead = document.querySelector('#personTrendTable thead');
-  const tbody = document.querySelector('#personTrendTable tbody');
-  let headHtml = '<tr><th>责任人</th>';
-  dates.forEach(d => { headHtml += `<th>${d.label}</th>`; });
-  headHtml += '</tr>';
-  thead.innerHTML = headHtml;
-  let bodyHtml = '';
-  const allPersonKeys = members.filter(m => m && m !== 'nan');
+  // 人员范围：全部组别=所有近5天有数据的人；选组=组内成员
+  const allKeys = isAll ? Object.keys(byPerson) : members.filter(m => m && m !== 'nan');
   // 仅保留近5天有缺陷数量（合计>0）的负责人
-  const personKeys = allPersonKeys.filter(p => {
+  const personKeys = allKeys.filter(p => {
     const counts = byPerson[p] || [];
     return counts.reduce((a, b) => a + (b || 0), 0) > 0;
   });
+  // 按最新一天数量排序（用户要求：升降序按最后当天数量）
+  const sortKey = p => { const c = byPerson[p] || []; return c[c.length - 1] || 0; };
+  personKeys.sort((a, b) => personSortDir === 'desc' ? sortKey(b) - sortKey(a) : sortKey(a) - sortKey(b));
+
+  // 表格：负责人 | 所属组 | 5天日期列 | 合计（最新一天高亮）
+  const arrow = personSortDir === 'desc' ? '▼' : '▲';
+  const thead = document.querySelector('#personTrendTable thead');
+  const tbody = document.querySelector('#personTrendTable tbody');
+  let headHtml = '<tr>' +
+    `<th style="cursor:pointer;user-select:none;" onclick="togglePersonSort()">负责人 <span style="color:#1a237e;font-size:10px;">${arrow}</span></th>` +
+    `<th style="cursor:pointer;user-select:none;" onclick="togglePersonSort()">所属组 <span style="color:#1a237e;font-size:10px;">${arrow}</span></th>`;
+  dates.forEach(d => { headHtml += `<th>${d.label}</th>`; });
+  headHtml += '<th>合计</th></tr>';
+  thead.innerHTML = headHtml;
+  let bodyHtml = '';
   personKeys.forEach(p => {
     const counts = byPerson[p] || dates.map(() => 0);
-    bodyHtml += `<tr><td style="white-space:nowrap;font-weight:500;">${p}</td>`;
+    const total = counts.reduce((a, b) => a + (b || 0), 0);
+    const gname = isAll ? matchGroup(p) : groupName;
+    bodyHtml += `<tr><td style="white-space:nowrap;font-weight:500;">${p}</td><td style="color:#666;">${gname}</td>`;
     dates.forEach((_, i) => {
       const c = counts[i] || 0;
-      bodyHtml += `<td style="${c>0?'font-weight:600;color:#e65100;':''}">${c}</td>`;
+      const isLast = i === dates.length - 1;
+      bodyHtml += `<td style="${isLast ? 'font-weight:700;color:#e65100;background:#fff3e0;' : (c>0 ? 'font-weight:600;color:#e65100;' : '')}">${c}</td>`;
     });
-    bodyHtml += '</tr>';
+    bodyHtml += `<td style="font-weight:700;">${total}</td></tr>`;
   });
   if (personKeys.length === 0) {
-    bodyHtml = '<tr><td colspan="' + (dates.length+1) + '" style="text-align:center;color:#999;">该组暂无成员数据</td></tr>';
+    bodyHtml = '<tr><td colspan="' + (dates.length+3) + '" style="text-align:center;color:#999;">' + (isAll ? '所选机型下暂无有缺陷的负责人' : '该组暂无成员数据') + '</td></tr>';
   }
   tbody.innerHTML = bodyHtml;
 
-  // 折线图
-  const ctx = document.getElementById('personChart').getContext('2d');
-  if (personChart) personChart.destroy();
-  if (labels.length > 0 && personKeys.length > 0) {
-    const datasets = personKeys.map((p, i) => {
-      const counts = byPerson[p] || dates.map(() => 0);
-      return {
-        label: p,
-        data: counts,
-        borderColor: PERSON_COLORS[i % PERSON_COLORS.length],
-        backgroundColor: 'rgba(0,0,0,0)',
-        tension: .3,
-        pointRadius: 3,
-        pointHoverRadius: 5,
-        borderWidth: 2.5,
-        spanGaps: true
-      };
-    });
-    personChart = new Chart(ctx, {
-      type: 'line',
-      data: { labels, datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, padding: 8, font: { size: 10 } } },
-          tooltip: { backgroundColor: 'rgba(0,0,0,.8)', padding: 10, cornerRadius: 6 },
-          datalabels: { display: false }
-        },
-        scales: {
-          y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,.06)' } },
-          x: { ticks: { font: { size: 11 } }, grid: { display: false } }
+  // 走势图：仅选组时显示（全部组别线太多，隐藏）
+  const lineWrap = document.getElementById('personLineWrap');
+  if (isAll) {
+    if (personChart) personChart.destroy();
+    lineWrap.style.display = 'none';
+  } else {
+    lineWrap.style.display = 'block';
+    const ctx = document.getElementById('personChart').getContext('2d');
+    if (personChart) personChart.destroy();
+    if (labels.length > 0 && personKeys.length > 0) {
+      const datasets = personKeys.map((p, i) => {
+        const counts = byPerson[p] || dates.map(() => 0);
+        return {
+          label: p,
+          data: counts,
+          borderColor: PERSON_COLORS[i % PERSON_COLORS.length],
+          backgroundColor: 'rgba(0,0,0,0)',
+          tension: .3,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          borderWidth: 2.5,
+          spanGaps: true
+        };
+      });
+      personChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, padding: 8, font: { size: 10 } } },
+            tooltip: { backgroundColor: 'rgba(0,0,0,.8)', padding: 10, cornerRadius: 6 },
+            datalabels: { display: false }
+          },
+          scales: {
+            y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,.06)' } },
+            x: { ticks: { font: { size: 11 } }, grid: { display: false } }
+          }
         }
-      }
-    });
+      });
+    }
   }
 
-  // 柱状图（组内成员，最新一天，堆叠）
-  document.querySelector('#personBarWrap h3').innerHTML = '📊 组内各负责人缺陷数量 <small style="color:#999;font-weight:400;">（最新一天，按严重程度堆叠）</small>';
+  // 柱状图（最新一天，堆叠）
+  document.querySelector('#personBarWrap h3').innerHTML = isAll
+    ? '📊 负责人缺陷数量排行 <small style="color:#999;font-weight:400;">（全部组别，最新一天，按数量降序）</small>'
+    : '📊 组内各负责人缺陷数量 <small style="color:#999;font-weight:400;">（最新一天，按严重程度堆叠）</small>';
   const barData = personKeys.map(p => {
     const sv = sevAgg[p] || { 严重: 0, 一般: 0, 优化建议: 0 };
     return {
@@ -904,60 +910,6 @@ function renderPersonTrend() {
   renderPersonBarChart(barData);
 
   // 根据表格高度自适应布局：表格矮→左2右1，表格高→左1右2
-  relayoutPerson();
-}
-
-function renderPersonRank(sevAgg) {
-  // 排名模式：全部负责人（跨组、按所选机型），最新一天数量
-  const lineWrap = document.getElementById('personLineWrap');
-  lineWrap.style.display = 'none';
-  if (personChart) personChart.destroy();
-
-  const sortMode = document.getElementById('personRankSort').value; // 'count' | 'group'
-  const rankData = Object.keys(sevAgg).map(p => {
-    const sv = sevAgg[p] || { 严重: 0, 一般: 0, 优化建议: 0 };
-    return {
-      name: p,
-      group: matchGroup(p),
-      sev: sv['严重'] || 0,
-      norm: sv['一般'] || 0,
-      sug: sv['优化建议'] || 0,
-      value: (sv['严重'] || 0) + (sv['一般'] || 0) + (sv['优化建议'] || 0)
-    };
-  }).filter(d => d.value > 0);
-  if (sortMode === 'group') {
-    // 按组排序：组名升序，组内按数量降序
-    rankData.sort((a, b) => (a.group < b.group ? -1 : a.group > b.group ? 1 : b.value - a.value));
-  } else {
-    rankData.sort((a, b) => b.value - a.value);
-  }
-
-  // 表格：排名/负责人/所属组/严重/一般/优化/合计（最新一天）
-  const thead = document.querySelector('#personTrendTable thead');
-  const tbody = document.querySelector('#personTrendTable tbody');
-  thead.innerHTML = '<tr><th>排名</th><th>负责人</th><th>所属组</th><th style="color:#D32F2F;">严重</th><th style="color:#1976D2;">一般</th><th style="color:#388E3C;">优化</th><th>合计</th></tr>';
-  let bodyHtml = '';
-  let prevGroup = null;
-  let groupIdx = 0;
-  rankData.forEach((d, i) => {
-    if (sortMode === 'group' && d.group !== prevGroup) {
-      groupIdx = 0;
-      bodyHtml += `<tr style="background:#eef2fb;"><td colspan="7" style="font-weight:700;color:#1a237e;padding:4px 5px;">🗂 ${d.group}</td></tr>`;
-      prevGroup = d.group;
-    }
-    groupIdx++;
-    const rankNo = sortMode === 'group' ? groupIdx : i + 1;
-    bodyHtml += `<tr><td style="font-weight:700;color:#1a237e;">${rankNo}</td><td style="white-space:nowrap;font-weight:500;">${d.name}</td><td style="color:#666;">${d.group}</td><td style="font-weight:600;color:#D32F2F;">${d.sev}</td><td style="font-weight:600;color:#1976D2;">${d.norm}</td><td style="font-weight:600;color:#388E3C;">${d.sug}</td><td style="font-weight:700;color:#e65100;">${d.value}</td></tr>`;
-  });
-  if (rankData.length === 0) {
-    bodyHtml = '<tr><td colspan="7" style="text-align:center;color:#999;">所选机型下暂无有缺陷的负责人</td></tr>';
-  }
-  tbody.innerHTML = bodyHtml;
-
-  // 柱状图（全部负责人排行，最新一天，堆叠，降序）
-  document.querySelector('#personBarWrap h3').innerHTML = '📊 负责人缺陷数量排行 <small style="color:#999;font-weight:400;">（全部组别，最新一天，按数量降序）</small>';
-  const barData = rankData.slice().sort((a, b) => b.value - a.value).map(d => ({ name: d.name, sev: d.sev, norm: d.norm, sug: d.sug, value: d.value }));
-  renderPersonBarChart(barData);
   relayoutPerson();
 }
 
@@ -1021,8 +973,9 @@ function relayoutPerson() {
   const leftCol = document.getElementById('personLeftCol');
   const rightCol = document.getElementById('personRightCol');
   const tableH = tableWrap.scrollHeight;
-  if (personMode === 'rank') {
-    // 排名模式：无走势图，表格左、柱状图右
+  const isAll = (document.getElementById('personGroupSelect').value === '');
+  if (isAll) {
+    // 全部组别：无走势图，表格左、柱状图右
     lineWrap.style.display = 'none';
     if (barWrap.parentNode !== rightCol) rightCol.appendChild(barWrap);
     return;
