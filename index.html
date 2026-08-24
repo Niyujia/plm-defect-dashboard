@@ -789,10 +789,16 @@ function aggregatePersonBarTrend() {
   return out;
 }
 
-let personSortDir = 'desc'; // 表格排序方向（按最新一天数量）
+let personSortDir = 'desc'; // 表格排序方向
+let personSortKey = 'count'; // 当前排序列：'count'按负责人最新一天数量 | 'group'按组总数
 
-function togglePersonSort() {
-  personSortDir = personSortDir === 'desc' ? 'asc' : 'desc';
+function togglePersonSort(key) {
+  if (key === personSortKey) {
+    personSortDir = personSortDir === 'desc' ? 'asc' : 'desc';
+  } else {
+    personSortKey = key;
+    personSortDir = 'desc';
+  }
   renderPersonTrend();
 }
 
@@ -816,35 +822,53 @@ function renderPersonTrend() {
     const counts = byPerson[p] || [];
     return counts.reduce((a, b) => a + (b || 0), 0) > 0;
   });
-  // 按最新一天数量排序（用户要求：升降序按最后当天数量）
-  const sortKey = p => { const c = byPerson[p] || []; return c[c.length - 1] || 0; };
-  personKeys.sort((a, b) => personSortDir === 'desc' ? sortKey(b) - sortKey(a) : sortKey(a) - sortKey(b));
+  // 每人最新一天数量（排序键）
+  const lastVal = p => { const c = byPerson[p] || []; return c[c.length - 1] || 0; };
+  const gOf = p => isAll ? matchGroup(p) : groupName;
+  if (personSortKey === 'group') {
+    // 按组排序：组别相同放一起，组间按组总数（成员最新一天之和）升降序，组内按个人最新一天数量
+    const groupTotal = {};
+    personKeys.forEach(p => { const g = gOf(p); groupTotal[g] = (groupTotal[g] || 0) + lastVal(p); });
+    personKeys.sort((a, b) => {
+      const ga = gOf(a), gb = gOf(b);
+      if (ga !== gb) return personSortDir === 'desc' ? (groupTotal[gb] - groupTotal[ga]) : (groupTotal[ga] - groupTotal[gb]);
+      return personSortDir === 'desc' ? lastVal(b) - lastVal(a) : lastVal(a) - lastVal(b);
+    });
+  } else {
+    // 按负责人：最新一天数量升降序
+    personKeys.sort((a, b) => personSortDir === 'desc' ? lastVal(b) - lastVal(a) : lastVal(a) - lastVal(b));
+  }
 
-  // 表格：负责人 | 所属组 | 5天日期列 | 合计（最新一天高亮）
+  // 表格：负责人 | 所属组 | 5天日期列（最新一天高亮）
   const arrow = personSortDir === 'desc' ? '▼' : '▲';
   const thead = document.querySelector('#personTrendTable thead');
   const tbody = document.querySelector('#personTrendTable tbody');
   let headHtml = '<tr>' +
-    `<th style="cursor:pointer;user-select:none;" onclick="togglePersonSort()">负责人 <span style="color:#1a237e;font-size:10px;">${arrow}</span></th>` +
-    `<th style="cursor:pointer;user-select:none;" onclick="togglePersonSort()">所属组 <span style="color:#1a237e;font-size:10px;">${arrow}</span></th>`;
+    `<th style="cursor:pointer;user-select:none;white-space:nowrap;" onclick="togglePersonSort('count')">负责人 <span style="color:${personSortKey==='count' ? '#1a237e' : '#bbb'};font-size:10px;">${personSortKey==='count' ? arrow : '▼'}</span></th>` +
+    `<th style="cursor:pointer;user-select:none;white-space:nowrap;" onclick="togglePersonSort('group')">所属组 <span style="color:${personSortKey==='group' ? '#1a237e' : '#bbb'};font-size:10px;">${personSortKey==='group' ? arrow : '▼'}</span></th>`;
   dates.forEach(d => { headHtml += `<th>${d.label}</th>`; });
-  headHtml += '<th>合计</th></tr>';
+  headHtml += '</tr>';
   thead.innerHTML = headHtml;
   let bodyHtml = '';
+  let prevGroup = null;
   personKeys.forEach(p => {
     const counts = byPerson[p] || dates.map(() => 0);
-    const total = counts.reduce((a, b) => a + (b || 0), 0);
-    const gname = isAll ? matchGroup(p) : groupName;
+    const gname = gOf(p);
+    if (personSortKey === 'group' && gname !== prevGroup) {
+      const gt = personKeys.reduce((s, q) => (gOf(q) === gname ? s + lastVal(q) : s), 0);
+      bodyHtml += `<tr style="background:#eef2fb;"><td colspan="${dates.length+2}" style="font-weight:700;color:#1a237e;padding:4px 5px;">🗂 ${gname}（${gt}）</td></tr>`;
+      prevGroup = gname;
+    }
     bodyHtml += `<tr><td style="white-space:nowrap;font-weight:500;">${p}</td><td style="color:#666;">${gname}</td>`;
     dates.forEach((_, i) => {
       const c = counts[i] || 0;
       const isLast = i === dates.length - 1;
       bodyHtml += `<td style="${isLast ? 'font-weight:700;color:#e65100;background:#fff3e0;' : (c>0 ? 'font-weight:600;color:#e65100;' : '')}">${c}</td>`;
     });
-    bodyHtml += `<td style="font-weight:700;">${total}</td></tr>`;
+    bodyHtml += '</tr>';
   });
   if (personKeys.length === 0) {
-    bodyHtml = '<tr><td colspan="' + (dates.length+3) + '" style="text-align:center;color:#999;">' + (isAll ? '所选机型下暂无有缺陷的负责人' : '该组暂无成员数据') + '</td></tr>';
+    bodyHtml = '<tr><td colspan="' + (dates.length+2) + '" style="text-align:center;color:#999;">' + (isAll ? '所选机型下暂无有缺陷的负责人' : '该组暂无成员数据') + '</td></tr>';
   }
   tbody.innerHTML = bodyHtml;
 
