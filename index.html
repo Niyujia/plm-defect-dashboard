@@ -859,7 +859,7 @@ function renderPersonTrend() {
     });
     groups.forEach(g => {
       const counts = groupDaily[g];
-      bodyHtml += `<tr><td style="white-space:nowrap;font-weight:600;color:#1a237e;">🗂 ${g}</td><td></td>`;
+      bodyHtml += `<tr><td style="color:#bbb;">/</td><td style="white-space:nowrap;font-weight:600;color:#1a237e;">🗂 ${g}</td>`;
       dates.forEach((_, i) => {
         const c = counts[i] || 0;
         const isLast = i === dates.length - 1;
