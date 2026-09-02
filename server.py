@@ -273,10 +273,9 @@ def calc_tr_closure(items):
             idx = TR_PHASES.index(tr_name)
             include_phases = TR_PHASES[:idx + 1]
         subset = [d for d in items if d.get('resolvePhase') in include_phases]
-        total = max(0, len(subset) - tr1_total)
-        closed = len([d for d in subset
-                      if d.get('status') in ('已关闭', '评审关闭')
-                      and d.get('round') != 'TR1'])
+        # 不扣除 TR1 轮次，与 Excel 直接筛选数一致
+        total = len(subset)
+        closed = len([d for d in subset if d.get('status') in ('已关闭', '评审关闭')])
         rate = round(closed / total * 100, 1) if total > 0 else 0
         results.append({
             'node': tr_name, 'total': int(total), 'closed': int(closed),
