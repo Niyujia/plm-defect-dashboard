@@ -262,25 +262,27 @@ TR_DISPLAY = ['TR1', 'TR2', 'TR3', 'TR4', '结项']
 
 def calc_tr_closure(items):
     tr1_total = sum(1 for d in items if d.get('round') == 'TR1')
+    # 总览口径（TR3/TR4/结项共用）
+    total_all = len(items)
+    closed_all = len([d for d in items if d.get('status') in ('已关闭', '评审关闭', '已解决')])
+    rate_all = round(closed_all / total_all * 100, 1) if total_all > 0 else 0
     results = []
     for tr_name in TR_DISPLAY:
         if tr_name == 'TR1':
             results.append({'node': 'TR1', 'total': int(tr1_total), 'closed': 0, 'rate': 0, 'target': 0, 'phases': 'TR1(测试轮次)'})
             continue
-        if tr_name == '结项':
-            include_phases = ['结项', 'TR1', 'TR2', 'TR3', 'TR4']
+        if tr_name == 'TR2':
+            subset = [d for d in items if d.get('resolvePhase') in ('TR1', 'TR2')]
+            total = len(subset)
+            closed = len([d for d in subset if d.get('status') in ('已关闭', '评审关闭')])
+            rate = round(closed / total * 100, 1) if total > 0 else 0
+            phases = 'TR1+TR2(计划解决阶段)'
         else:
-            idx = TR_PHASES.index(tr_name)
-            include_phases = TR_PHASES[:idx + 1]
-        subset = [d for d in items if d.get('resolvePhase') in include_phases]
-        # 不扣除 TR1 轮次，与 Excel 直接筛选数一致
-        total = len(subset)
-        closed = len([d for d in subset if d.get('status') in ('已关闭', '评审关闭')])
-        rate = round(closed / total * 100, 1) if total > 0 else 0
+            total, closed, rate, phases = total_all, closed_all, rate_all, '缺陷总览口径'
         results.append({
             'node': tr_name, 'total': int(total), 'closed': int(closed),
             'rate': rate, 'target': TR_TARGETS.get(tr_name, 0),
-            'phases': '+'.join(include_phases),
+            'phases': phases,
         })
     return results
 
