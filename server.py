@@ -134,6 +134,7 @@ COLUMN_MAP = {
     'severityvalue': '严重程度',
     'developowner': '流程未执行人',
     'modelvalue': '机型',
+    'pjname': '所属项目',
     'testfrequencyvalue': '测试轮数',
     'solphasevalue': '计划解决阶段',
     'createtime': '创建时间',
@@ -195,11 +196,17 @@ def get_group_for_person(person_str, p2g):
 def build_details_list(df, p2g):
     items = []
     for _, row in df.iterrows():
+        raw_project = row.get('所属项目', '')
+        if pd.isna(raw_project):
+            project = '未指定'
+        else:
+            project = str(raw_project).strip() or '未指定'
         items.append({
             'id': str(row.get('问题编号', '')),
             'name': str(row.get('问题名称', ''))[:80],
             'person': str(row.get('流程未执行人', '')),
             'model': str(row.get('机型', '')),
+            'project': project,
             'status': str(row.get('问题状态', '')),
             'severity': str(row.get('严重程度', '')),
             'group': get_group_for_person(row.get('流程未执行人', ''), p2g),
@@ -295,8 +302,25 @@ def build_dashboard_data(df, p2g):
     models = get_models(df)
     phases = calc_phase_stats(all_details)
     tr_data = calc_tr_closure(all_details)
+    # 所属项目列表（按出现频次降序，未指定排最后）
+    from collections import Counter
+    proj_counter = Counter()
+    proj_models = {}
+    for d in all_details:
+        p = d.get('project') or '未指定'
+        m = d.get('model') or ''
+        proj_counter[p] += 1
+        if p not in proj_models:
+            proj_models[p] = []
+        if m and m not in proj_models[p]:
+            proj_models[p].append(m)
+    projects = [p for p, _ in proj_counter.most_common() if p != '未指定']
+    if '未指定' in proj_counter:
+        projects.append('未指定')
     return {
         'MODELS': models,
+        'PROJECTS': projects,
+        'PROJECT_MODELS': proj_models,
         'OVERVIEW': overview,
         'GROUP_STATS': group_stats,
         'ALL_DETAILS': all_details,
