@@ -153,7 +153,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica
     <div class="model-area">
       <span class="model-label">机型：</span>
       <div class="model-dropdown" id="modelDropdown">
-        <button class="model-dropdown-btn" onclick="toggleModelMenu()">▼ 选择机型</button>
+        <button class="model-dropdown-btn" id="modelDropdownBtn" onclick="toggleModelMenu()">▼ 全部机型</button>
         <div class="model-menu" id="modelMenu"></div>
       </div>
       <div class="model-tags" id="modelTags"></div>
@@ -300,9 +300,9 @@ function getActiveModels() {
 
 // ===== Init =====
 function init() {
-  // 默认全选所有机型、全选所有项目
+  // 默认全选所有机型；所属项目默认"未选择"="全部项目"（不占篇幅，点选某项目即单选）
   selModels = [...DATA.MODELS];
-  selProjects = (DATA.PROJECTS || []).slice();
+  selProjects = [];
   selGroups = [];
   checkAutoRefresh();
   initModelMenu();
@@ -489,10 +489,22 @@ function initProjectMenu() {
     label.onmouseleave = function() { this.style.background = ''; };
     const cb = document.createElement('input');
     cb.type = 'checkbox';
-    cb.checked = selProjects.length === 0 || selProjects.includes(p);
+    cb.checked = selProjects.length > 0 && selProjects.includes(p);
     cb.onchange = function() {
-      if (cb.checked) { if(!selProjects.includes(p)) selProjects.push(p); }
-      else { selProjects = selProjects.filter(x => x !== p); }
+      const allP = DATA.PROJECTS || [];
+      const isAllState = selProjects.length === 0 || selProjects.length >= allP.length;
+      if (cb.checked) {
+        if (isAllState) {
+          // 从"全部"直接进入"只选该项目"
+          selProjects = [p];
+          menu.querySelectorAll('.project-item input[type=checkbox]').forEach(c => { if (c !== cb) c.checked = false; });
+        } else {
+          if (!selProjects.includes(p)) selProjects.push(p);
+        }
+      } else {
+        selProjects = selProjects.filter(x => x !== p);
+        // 取消到空 = 全部项目
+      }
       updateProjectTags(); refreshAll();
     };
     label.appendChild(cb); label.appendChild(document.createTextNode(p));
@@ -508,11 +520,12 @@ function updateProjectTags() {
   const btn = document.getElementById('projectDropdownBtn');
   tags.innerHTML = '';
   const all = DATA.PROJECTS || [];
+  // 未选择或全选 = 全部项目：不显示标签
   if (selProjects.length === 0 || selProjects.length >= all.length) {
     btn.textContent = '▼ 全部项目 (' + all.length + ')';
-  } else {
-    btn.textContent = '▼ 已选 ' + selProjects.length + '/' + all.length;
+    return;
   }
+  btn.textContent = '▼ 已选 ' + selProjects.length + '/' + all.length;
   selProjects.forEach(p => {
     const t = document.createElement('span'); t.className = 'project-tag';
     t.textContent = p + ' ✕';
@@ -536,7 +549,15 @@ function updateProjectTags() {
 
 function updateModelTags() {
   const tags = document.getElementById('modelTags');
+  const btn = document.getElementById('modelDropdownBtn');
   tags.innerHTML = '';
+  const all = DATA.MODELS || [];
+  // 未选择或全选 = 全部机型：不显示标签，避免占篇幅
+  if (selModels.length === 0 || selModels.length >= all.length) {
+    btn.textContent = '▼ 全部机型 (' + all.length + ')';
+    return;
+  }
+  btn.textContent = '▼ 已选 ' + selModels.length + '/' + all.length;
   selModels.forEach(m => {
     const t = document.createElement('span'); t.className='model-tag';
     t.textContent = m + ' ✕';
@@ -1635,7 +1656,7 @@ function rebuildFromRaw(raw) {
   document.querySelector('.model-tags').innerHTML = '';
   initModelMenu();
   // 更新项目下拉
-  selProjects = (DATA.PROJECTS || []).slice();
+  selProjects = [];
   document.getElementById('projectMenu').innerHTML = '';
   document.querySelector('#projectTags').innerHTML = '';
   initProjectMenu();
