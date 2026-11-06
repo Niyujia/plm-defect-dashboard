@@ -459,24 +459,40 @@ def _run_auto_refresh(reason):
                     log(f'[AUTO] TR3 导出跳过(不影响主流程): {(r0.stderr or r0.stdout or "")[-300:]}')
             except Exception as e:
                 log(f'[AUTO] TR3 导出异常(已忽略): {e}')
-            # Step 1: Skill C 导出最新报表
-            _refresh_state['stage'] = 'Skill C 导出'
-            log('[AUTO] 执行 Skill C 导出...')
-            r1 = subprocess.run([AUTO_PYTHON, EXPORT_SCRIPT],
-                                capture_output=True, text=True, timeout=600,
-                                cwd=os.path.dirname(EXPORT_SCRIPT))
-            if r1.returncode != 0:
-                log(f'[AUTO] Skill C 失败: {(r1.stderr or r1.stdout or "")[-500:]}')
-            else:
-                log(f'[AUTO] Skill C 完成: {(r1.stdout or "")[-300:]}')
-            # Step 1.5: 校验最新报表真伪；伪 xlsx（服务端错误 JSON）隔离后走 API 兜底
+            # Step 1: 导出最新报表（API 优先：新责任人口径 combinename + 绕开深分页故障；
+            # Skill C 页面导出仅作兜底，其硬编码 claims 会过期）
+            _refresh_state['stage'] = 'API 导出'
+            log('[AUTO] 执行 API 导出（新口径优先）...')
+            api_exported = False
+            api_script = os.path.join(WEB_ROOT, 'export_via_api.py')
+            try:
+                r1a = subprocess.run([AUTO_PYTHON, api_script],
+                                     capture_output=True, text=True, timeout=300,
+                                     cwd=WEB_ROOT)
+                if r1a.returncode == 0:
+                    api_exported = True
+                    log(f'[AUTO] API 导出成功: {(r1a.stdout or "")[-200:]}')
+                else:
+                    log(f'[AUTO] API 导出失败: {(r1a.stderr or r1a.stdout or "")[-300:]}')
+            except Exception as e:
+                log(f'[AUTO] API 导出异常: {e}')
+            if not api_exported:
+                _refresh_state['stage'] = 'Skill C 导出'
+                log('[AUTO] 兜底执行 Skill C 导出...')
+                r1 = subprocess.run([AUTO_PYTHON, EXPORT_SCRIPT],
+                                    capture_output=True, text=True, timeout=600,
+                                    cwd=os.path.dirname(EXPORT_SCRIPT))
+                if r1.returncode != 0:
+                    log(f'[AUTO] Skill C 失败: {(r1.stderr or r1.stdout or "")[-500:]}')
+                else:
+                    log(f'[AUTO] Skill C 完成: {(r1.stdout or "")[-300:]}')
+            # Step 1.5: 校验最新报表真伪；伪 xlsx（服务端错误 JSON）隔离后再兜底一次
             valid = _validate_latest_report()
-            if valid is None or os.path.basename(valid).find(
-                    datetime.now().strftime('%Y%m%d')) == -1:
-                # 今天的报表缺失或全部无效 → 直接走 API 导出
+            if not api_exported and (valid is None or os.path.basename(valid).find(
+                    datetime.now().strftime('%Y%m%d')) == -1):
+                # 今天的报表缺失或全部无效 → 再尝试一次 API 导出
                 _refresh_state['stage'] = 'API 兜底导出'
-                log('[AUTO] 无当日有效报表，执行 API 兜底导出...')
-                api_script = os.path.join(WEB_ROOT, 'export_via_api.py')
+                log('[AUTO] 无当日有效报表，再次执行 API 兜底导出...')
                 try:
                     r1b = subprocess.run([AUTO_PYTHON, api_script],
                                          capture_output=True, text=True, timeout=300,
