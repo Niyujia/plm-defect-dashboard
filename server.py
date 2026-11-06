@@ -40,7 +40,12 @@ _COLOR_PALETTE = [
 def log(msg):
     ts = datetime.now().strftime('%H:%M:%S')
     line = f'[{ts}] {msg}'
-    print(line, flush=True)
+    # pythonw 下 stdout 重定向时按 GBK 编码，emoji（❌ 等）会抛 UnicodeEncodeError，
+    # 一旦异常冒泡可能中断刷新流程，这里必须吞掉
+    try:
+        print(line, flush=True)
+    except Exception:
+        pass
     # pythonw 无窗口运行时 stdout 不可见，同时写文件日志便于排查
     try:
         with open(os.path.join(WEB_ROOT, 'server.log'), 'a', encoding='utf-8') as f:
@@ -105,24 +110,46 @@ def build_groups(p2g):
     return groups, [g for g, _ in android_list], colors
 
 def fetch_defect_data(token):
-    """从PLM获取全部产品缺陷报表数据（分页）"""
+    """从PLM获取全部产品缺陷报表数据。
+
+    注意：服务端对深分页（OFFSET>=9000 左右）必现
+    "An I/O error occurred while sending to the backend"。
+    因此优先单页大 limit 取全量，绕开深分页；仅当总数超过
+    单页上限时才退化为小步分页（每页 5000，OFFSET 较浅时可用）。
+    """
     all_items = []
-    page = 1
-    total = None
-    while True:
-        resp = plm_post(DEFECT_REPORT_ID, token, page_no=page)
-        resp.raise_for_status()
-        data = resp.json()
-        table = data['result']['dataList']['BUG']
-        items = table.get('list', [])
-        if total is None:
-            total = table.get('count', 0)
-            log(f'缺陷报表总数: {total}条')
-        all_items.extend(items)
-        log(f'  第{page}页: {len(items)}条')
-        if len(all_items) >= total or len(items) == 0:
-            break
-        page += 1
+    # 第一页：直接请求足够大的 pageSize（>= 总数），一次取完
+    first_size = 20000
+    resp = plm_post(DEFECT_REPORT_ID, token, page_no=1, page_size=first_size)
+    resp.raise_for_status()
+    data = resp.json()
+    table = data['result']['dataList']['BUG']
+    items = table.get('list', [])
+    total = table.get('count', 0)
+    log(f'缺陷报表总数: {total}条')
+    all_items.extend(items)
+    log(f'  第1页(size={first_size}): {len(items)}条')
+
+    # 兜底：总数超过单页上限，用 5000/页继续取（浅 OFFSET 可用）
+    if total > len(all_items):
+        page_size = 5000
+        page = 2
+        while len(all_items) < total:
+            try:
+                resp = plm_post(DEFECT_REPORT_ID, token, page_no=page, page_size=page_size)
+                d = resp.json()
+                dl = (d.get('result') or {}).get('dataList') or {}
+                bug = dl.get('BUG') or {}
+                items = bug.get('list', [])
+            except Exception as e:
+                log(f'  第{page}页取数异常: {e}')
+                items = []
+            if not items:
+                log(f'  第{page}页返回空，停止分页（OFFSET 可能触发服务端故障）')
+                break
+            all_items.extend(items)
+            log(f'  第{page}页: {len(items)}条 (累计 {len(all_items)}/{total})')
+            page += 1
     log(f'缺陷数据获取完成: {len(all_items)}条')
     return all_items
 
@@ -141,13 +168,20 @@ COLUMN_MAP = {
 }
 
 def items_to_df(items):
-    """将PLM API返回的缺陷数据转换为DataFrame（列名与Excel一致）"""
+    """将PLM API返回的缺陷数据转换为DataFrame（列名与Excel一致）
+
+    责任人口径：优先取 combinename（PLM 当前责任人），为空时回退 developowner。
+    开发负责人列保留 developowner 原值。
+    """
     rows = []
     for item in items:
+        dev = str(item.get('developowner', '') or '').strip()
+        comb = str(item.get('combinename', '') or '').strip()
         row = {}
         for api_col, df_col in COLUMN_MAP.items():
             row[df_col] = item.get(api_col, '')
-        row['开发负责人'] = item.get('developowner', '')
+        row['流程未执行人'] = comb or dev
+        row['开发负责人'] = dev
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -285,7 +319,7 @@ def calc_tr_closure(items):
             rate = round(closed / total * 100, 1) if total > 0 else 0
             phases = 'TR1+TR2(计划解决阶段)'
         else:
-            total, closed, rate, phases = total_all, closed_all, rate_all, '缺陷总览口径'
+            total, closed, rate, phases = total_all, closed_all, rate_all, '结项'
         results.append({
             'node': tr_name, 'total': int(total), 'closed': int(closed),
             'rate': rate, 'target': TR_TARGETS.get(tr_name, 0),
@@ -337,6 +371,7 @@ def build_dashboard_data(df, p2g):
 AUTO_PYTHON = r'C:/Users/niyujia/.workbuddy/binaries/python/envs/default/Scripts/python.exe'
 EXPORT_SCRIPT = r'C:/Users/niyujia/.workbuddy/skills/Skill C 自动导出缺陷列表/scripts/export_plm.py'
 GEN_SCRIPT = r'C:/Users/niyujia/.workbuddy/skills/un10-three-tab-dashboard/scripts/generate_dashboard.py'
+TR3_SCRIPT = r'C:/Users/niyujia/.workbuddy/skills/un10-three-tab-dashboard/scripts/export_tr3.py'
 DEFECT_DIR = r'F:/UN10/PVT/缺陷'
 AUTO_COOLDOWN_SEC = 600  # 两次自动刷新最小间隔
 
@@ -367,6 +402,37 @@ def _latest_report_info():
     return best_date, best_mtime
 
 
+def _validate_latest_report():
+    """检查目录中最新的产品问题报表是否为有效 xlsx（PK 头且体积合理）。
+
+    返回有效文件的绝对路径；若最新文件是伪 xlsx（PLM 服务端错误 JSON），
+    自动归档到 _error_exports 后返回次新的有效文件路径；全无有效文件返回 None。
+    """
+    d = r'F:\UN10\PVT\缺陷'
+    files = [f for f in os.listdir(d) if '产品问题报表' in f and f.endswith('.xlsx')]
+    files.sort(key=lambda f: os.path.getmtime(os.path.join(d, f)), reverse=True)
+    err_dir = os.path.join(d, '_error_exports')
+    for f in files:
+        p = os.path.join(d, f)
+        try:
+            with open(p, 'rb') as fh:
+                magic = fh.read(2)
+            size = os.path.getsize(p)
+        except Exception:
+            continue
+        if magic == b'PK' and size > 100_000:
+            return p
+        # 伪报表（错误 JSON 或过小）→ 归档隔离，避免污染生成器
+        try:
+            os.makedirs(err_dir, exist_ok=True)
+            dst = os.path.join(err_dir, f.replace('.xlsx', '_隔离伪报表.xlsx'))
+            os.replace(p, dst)
+            log(f'[AUTO] 隔离伪报表文件: {f} -> _error_exports')
+        except Exception as e:
+            log(f'[AUTO] 隔离伪报表失败 {f}: {e}')
+    return None
+
+
 def _run_auto_refresh(reason):
     """后台线程依次执行 Skill C → Skill K（防并发）"""
     with _refresh_lock:
@@ -381,6 +447,18 @@ def _run_auto_refresh(reason):
     def worker():
         try:
             log(f'[AUTO] 自动刷新开始: {reason}')
+            # Step 0: 导出 TR3 复审报表（可选；token 失效时失败也不影响主流程）
+            _refresh_state['stage'] = 'TR3 报表导出'
+            try:
+                r0 = subprocess.run([AUTO_PYTHON, TR3_SCRIPT],
+                                    capture_output=True, text=True, timeout=300,
+                                    cwd=os.path.dirname(TR3_SCRIPT))
+                if r0.returncode == 0:
+                    log(f'[AUTO] TR3 导出完成: {(r0.stdout or "")[-200:]}')
+                else:
+                    log(f'[AUTO] TR3 导出跳过(不影响主流程): {(r0.stderr or r0.stdout or "")[-300:]}')
+            except Exception as e:
+                log(f'[AUTO] TR3 导出异常(已忽略): {e}')
             # Step 1: Skill C 导出最新报表
             _refresh_state['stage'] = 'Skill C 导出'
             log('[AUTO] 执行 Skill C 导出...')
@@ -388,10 +466,27 @@ def _run_auto_refresh(reason):
                                 capture_output=True, text=True, timeout=600,
                                 cwd=os.path.dirname(EXPORT_SCRIPT))
             if r1.returncode != 0:
-                _refresh_state['result'] = f'Skill C 导出失败: {(r1.stderr or r1.stdout or "")[-500:]}'
-                log(f'[AUTO] Skill C 失败: {r1.stderr[-500:]}')
+                log(f'[AUTO] Skill C 失败: {(r1.stderr or r1.stdout or "")[-500:]}')
             else:
                 log(f'[AUTO] Skill C 完成: {(r1.stdout or "")[-300:]}')
+            # Step 1.5: 校验最新报表真伪；伪 xlsx（服务端错误 JSON）隔离后走 API 兜底
+            valid = _validate_latest_report()
+            if valid is None or os.path.basename(valid).find(
+                    datetime.now().strftime('%Y%m%d')) == -1:
+                # 今天的报表缺失或全部无效 → 直接走 API 导出
+                _refresh_state['stage'] = 'API 兜底导出'
+                log('[AUTO] 无当日有效报表，执行 API 兜底导出...')
+                api_script = os.path.join(WEB_ROOT, 'export_via_api.py')
+                try:
+                    r1b = subprocess.run([AUTO_PYTHON, api_script],
+                                         capture_output=True, text=True, timeout=300,
+                                         cwd=WEB_ROOT)
+                    if r1b.returncode == 0:
+                        log(f'[AUTO] API 兜底成功: {(r1b.stdout or "")[-200:]}')
+                    else:
+                        log(f'[AUTO] API 兜底失败: {(r1b.stderr or r1b.stdout or "")[-400:]}')
+                except Exception as e:
+                    log(f'[AUTO] API 兜底异常: {e}')
             # Step 2: Skill K 生成看板
             _refresh_state['stage'] = 'Skill K 生成看板'
             log('[AUTO] 执行 Skill K 生成...')
@@ -556,8 +651,14 @@ class RefreshHandler(BaseHTTPRequestHandler):
             self.sse_send('complete', {'data': data, 'total_rows': len(df)})
             _refresh_state['last_api_finish'] = datetime.now().isoformat()
             log('刷新完成')
-            # 落盘：后台执行 Skill C(导出Excel) + Skill K(重新生成index.html)，让 F5 后数据源也是最新的
-            maybe_auto_refresh()
+            # 落盘：API 取到的是 PLM 实时数据，磁盘上的 index.html 快照必然落后，
+            # 因此这里不走「数据是否过期 / 冷却期」判断，直接后台强制落盘。
+            # （_run_auto_refresh 内部有锁，重复点击会自动跳过）
+            try:
+                threading.Thread(target=_run_auto_refresh, args=('api-refresh 手动刷新落盘',), daemon=True).start()
+                log('[API] 已触发后台落盘（导出Excel + 重新生成看板）')
+            except Exception as e:
+                log(f'[API] 落盘任务启动失败: {e}')
 
         except Exception as e:
             log(f'刷新失败: {traceback.format_exc()}')
